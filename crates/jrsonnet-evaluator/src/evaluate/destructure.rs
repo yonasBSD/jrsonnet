@@ -107,6 +107,11 @@ pub fn destruct<H: BuildHasher>(
 		}
 		#[cfg(feature = "exp-destruct")]
 		Destruct::Object { fields, rest } => {
+			use crate::ObjValueBuilder;
+			use jrsonnet_ir::DestructRest;
+			use rustc_hash::FxHashSet;
+
+			let captured_fields: FxHashSet<_> = fields.iter().map(|f| f.0.clone()).collect();
 			let field_names: Vec<_> = fields
 				.iter()
 				.map(|f| (f.0.clone(), f.2.is_some()))
@@ -130,6 +135,27 @@ pub fn destruct<H: BuildHasher>(
 				}
 				Ok(obj)
 			});
+
+			match rest {
+				Some(DestructRest::Keep(v)) => {
+					let full = full.clone();
+					destruct(
+						&Destruct::Full(v.clone()),
+						Thunk!(move || {
+							let full = full.evaluate()?;
+							let mut builder = ObjValueBuilder::new();
+							builder
+								.reserve_cores(1)
+								.extend_with_core(full.as_standalone());
+							builder.with_fields_omitted(captured_fields);
+							Ok(Val::Obj(builder.build()))
+						}),
+						fctx.clone(),
+						new_bindings,
+					)?;
+				}
+				Some(DestructRest::Drop) | None => {}
+			}
 
 			for (field, d, default) in fields {
 				let default = default.clone().map(|e| (fctx.clone(), e));

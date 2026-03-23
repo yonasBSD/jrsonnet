@@ -158,6 +158,7 @@ enum CacheValue {
 pub type EnumFieldsHandler<'a> =
 	dyn FnMut(SuperDepth, FieldIndex, IStr, EnumFields) -> ControlFlow<()> + 'a;
 
+#[derive(Debug)]
 pub enum EnumFields {
 	Normal(Visibility),
 	Omit(Skip),
@@ -289,7 +290,7 @@ impl ObjValue {
 }
 
 #[derive(Trace, Debug)]
-struct StandaloneSuperCore {
+pub(crate) struct StandaloneSuperCore {
 	sup: CoreIdx,
 	this: ObjValue,
 }
@@ -790,6 +791,14 @@ impl ObjValue {
 			obj: self.clone(),
 			key,
 		})
+	}
+	pub(crate) fn as_standalone(&self) -> StandaloneSuperCore {
+		StandaloneSuperCore {
+			sup: CoreIdx {
+				idx: self.0.cores.len(),
+			},
+			this: self.clone(),
+		}
 	}
 	pub fn ptr_eq(a: &Self, b: &Self) -> bool {
 		Cc::ptr_eq(&a.0, &b.0)
