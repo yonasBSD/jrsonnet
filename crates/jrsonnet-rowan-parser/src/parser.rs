@@ -917,7 +917,8 @@ fn lhs_basic(p: &mut Parser) -> Result<CompletedMarker, CompletedMarker> {
 
 		let m = p.start();
 		p.bump();
-		let _ = expr_binding_power(p, right_binding_power);
+		let _ = expr_binding_power(p, right_binding_power)
+			.map(|v| v.precede(p).complete(p, EXPR));
 		m.complete(p, EXPR_UNARY)
 	} else if p.at(T!['(']) {
 		let m = p.start();
