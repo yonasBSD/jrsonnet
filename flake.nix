@@ -10,20 +10,21 @@
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
     };
+    hercules-ci-effects = {
+      url = "github:hercules-ci/hercules-ci-effects";
+      inputs.flake-parts.follows = "flake-parts";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     crane.url = "github:ipetkov/crane";
     shelly.url = "github:CertainLach/shelly";
   };
   outputs =
-    inputs@{
-      nixpkgs,
-      flake-parts,
-      rust-overlay,
-      crane,
-      shelly,
-      ...
-    }:
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      imports = [ shelly.flakeModule ];
+    inputs:
+    inputs.flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [
+        inputs.shelly.flakeModule
+        inputs.hercules-ci-effects.flakeModule
+      ];
       systems = inputs.nixpkgs.lib.systems.flakeExposed;
       perSystem =
         {
@@ -32,13 +33,13 @@
           ...
         }:
         let
-          pkgs = import nixpkgs {
+          pkgs = import inputs.nixpkgs {
             inherit system;
-            overlays = [ rust-overlay.overlays.default ];
+            overlays = [ inputs.rust-overlay.overlays.default ];
             config.allowUnsupportedSystem = true;
           };
           rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-          craneLib = (crane.mkLib pkgs).overrideToolchain rust;
+          craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rust;
         in
         {
           legacyPackages = {
@@ -164,5 +165,6 @@
               ];
           };
         };
+      herculesCI = { };
     };
 }
