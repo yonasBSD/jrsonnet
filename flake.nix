@@ -57,24 +57,27 @@
               rsjsonnet = pkgs.callPackage ./nix/rsjsonnet.nix { };
             };
           };
-          packages = rec {
-            default = jrsonnet;
-
-            jrsonnet = pkgs.callPackage ./nix/jrsonnet.nix {
-              inherit craneLib;
-            };
-            jrsonnet-experimental = pkgs.callPackage ./nix/jrsonnet.nix {
-              inherit craneLib;
-              withExperimentalFeatures = true;
-            };
-
-            jrsonnet-release = pkgs.callPackage ./nix/jrsonnet-release.nix {
-              rustPlatform = pkgs.makeRustPlatform {
-                rustc = rust;
-                cargo = rust;
+          packages =
+            let
+              jrsonnet = pkgs.callPackage ./nix/jrsonnet.nix {
+                inherit craneLib;
               };
-            };
-
+              jrsonnet-experimental = pkgs.callPackage ./nix/jrsonnet.nix {
+                inherit craneLib;
+                withExperimentalFeatures = true;
+              };
+              jrsonnet-release = pkgs.callPackage ./nix/jrsonnet-release.nix {
+                rustPlatform = pkgs.makeRustPlatform {
+                  rustc = rust;
+                  cargo = rust;
+                };
+              };
+            in
+            {
+              default = jrsonnet;
+              inherit jrsonnet jrsonnet-experimental jrsonnet-release;
+            }
+          // pkgs.lib.optionalAttrs (system == "x86_64-linux" || system == "aarch64-linux") {
             benchmarks = pkgs.callPackage ./nix/benchmarks.nix {
               inherit (config.legacyPackages.jsonnetImpls)
                 go-jsonnet
