@@ -2,8 +2,8 @@
   description = "Jrsonnet";
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/release-25.11";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
+    fenix = {
+      url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     flake-parts = {
@@ -39,12 +39,23 @@
         let
           pkgs = import inputs.nixpkgs {
             inherit system;
-            overlays = [ inputs.rust-overlay.overlays.default ];
+            overlays = [ inputs.fenix.overlays.default ];
             config.allowUnsupportedSystem = true;
           };
-          rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-          craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rust;
-          treefmt = (inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix).config.build;
+          toolchain = pkgs.fenix.combine [
+            (pkgs.fenix.stable.withComponents [
+              "cargo"
+              "clippy"
+              "rustc"
+              "rust-src"
+            ])
+            pkgs.fenix.complete.rustfmt
+          ];
+          craneLib = (inputs.crane.mkLib pkgs).overrideToolchain toolchain;
+          treefmt =
+            (inputs.treefmt-nix.lib.evalModule pkgs (
+              import ./treefmt.nix { rustfmt = pkgs.fenix.complete.rustfmt; }
+            )).config.build;
         in
         {
           legacyPackages = {
@@ -68,8 +79,8 @@
               };
               jrsonnet-release = pkgs.callPackage ./nix/jrsonnet-release.nix {
                 rustPlatform = pkgs.makeRustPlatform {
-                  rustc = rust;
-                  cargo = rust;
+                  rustc = toolchain;
+                  cargo = toolchain;
                 };
               };
             in
@@ -77,82 +88,82 @@
               default = jrsonnet;
               inherit jrsonnet jrsonnet-experimental jrsonnet-release;
             }
-          // pkgs.lib.optionalAttrs (system == "x86_64-linux" || system == "aarch64-linux") {
-            benchmarks = pkgs.callPackage ./nix/benchmarks.nix {
-              inherit (config.legacyPackages.jsonnetImpls)
-                go-jsonnet
-                sjsonnet
-                cpp-jsonnet
-                rsjsonnet
-                ;
-              jrsonnetVariants = [
-                {
-                  drv = jrsonnet.override { forBenchmarks = true; };
-                  name = "";
-                }
-              ];
+            // pkgs.lib.optionalAttrs (system == "x86_64-linux" || system == "aarch64-linux") {
+              benchmarks = pkgs.callPackage ./nix/benchmarks.nix {
+                inherit (config.legacyPackages.jsonnetImpls)
+                  go-jsonnet
+                  sjsonnet
+                  cpp-jsonnet
+                  rsjsonnet
+                  ;
+                jrsonnetVariants = [
+                  {
+                    drv = jrsonnet.override { forBenchmarks = true; };
+                    name = "";
+                  }
+                ];
+              };
+              benchmarks-quick = pkgs.callPackage ./nix/benchmarks.nix {
+                inherit (config.legacyPackages.jsonnetImpls)
+                  go-jsonnet
+                  sjsonnet
+                  cpp-jsonnet
+                  rsjsonnet
+                  ;
+                quick = true;
+                jrsonnetVariants = [
+                  {
+                    drv = jrsonnet.override { forBenchmarks = true; };
+                    name = "";
+                  }
+                ];
+              };
+              benchmarks-against-release = pkgs.callPackage ./nix/benchmarks.nix {
+                inherit (config.legacyPackages.jsonnetImpls)
+                  go-jsonnet
+                  sjsonnet
+                  cpp-jsonnet
+                  rsjsonnet
+                  ;
+                jrsonnetVariants = [
+                  {
+                    drv = jrsonnet.override { forBenchmarks = true; };
+                    name = "current";
+                  }
+                  {
+                    drv = jrsonnet-experimental.override { forBenchmarks = true; };
+                    name = "current-experimental";
+                  }
+                  {
+                    drv = jrsonnet-release.override { forBenchmarks = true; };
+                    name = "release";
+                  }
+                ];
+              };
+              benchmarks-quick-against-release = pkgs.callPackage ./nix/benchmarks.nix {
+                inherit (config.legacyPackages.jsonnetImpls)
+                  go-jsonnet
+                  sjsonnet
+                  cpp-jsonnet
+                  rsjsonnet
+                  ;
+                quick = true;
+                jrsonnetVariants = [
+                  {
+                    drv = jrsonnet.override { forBenchmarks = true; };
+                    name = "current";
+                  }
+                  {
+                    drv = jrsonnet-experimental.override { forBenchmarks = true; };
+                    name = "current-experimental";
+                  }
+                  {
+                    drv = jrsonnet-release.override { forBenchmarks = true; };
+                    name = "release";
+                  }
+                ];
+              };
             };
-            benchmarks-quick = pkgs.callPackage ./nix/benchmarks.nix {
-              inherit (config.legacyPackages.jsonnetImpls)
-                go-jsonnet
-                sjsonnet
-                cpp-jsonnet
-                rsjsonnet
-                ;
-              quick = true;
-              jrsonnetVariants = [
-                {
-                  drv = jrsonnet.override { forBenchmarks = true; };
-                  name = "";
-                }
-              ];
-            };
-            benchmarks-against-release = pkgs.callPackage ./nix/benchmarks.nix {
-              inherit (config.legacyPackages.jsonnetImpls)
-                go-jsonnet
-                sjsonnet
-                cpp-jsonnet
-                rsjsonnet
-                ;
-              jrsonnetVariants = [
-                {
-                  drv = jrsonnet.override { forBenchmarks = true; };
-                  name = "current";
-                }
-                {
-                  drv = jrsonnet-experimental.override { forBenchmarks = true; };
-                  name = "current-experimental";
-                }
-                {
-                  drv = jrsonnet-release.override { forBenchmarks = true; };
-                  name = "release";
-                }
-              ];
-            };
-            benchmarks-quick-against-release = pkgs.callPackage ./nix/benchmarks.nix {
-              inherit (config.legacyPackages.jsonnetImpls)
-                go-jsonnet
-                sjsonnet
-                cpp-jsonnet
-                rsjsonnet
-                ;
-              quick = true;
-              jrsonnetVariants = [
-                {
-                  drv = jrsonnet.override { forBenchmarks = true; };
-                  name = "current";
-                }
-                {
-                  drv = jrsonnet-experimental.override { forBenchmarks = true; };
-                  name = "current-experimental";
-                }
-                {
-                  drv = jrsonnet-release.override { forBenchmarks = true; };
-                  name = "release";
-                }
-              ];
-            };
-          };
           checks.formatting = treefmt.check inputs.self;
           formatter = treefmt.wrapper;
           shelly.shells.default = {
@@ -175,16 +186,18 @@
               ];
           };
         };
-      herculesCI = { lib, ... }: {
-        ciSystems = [
-          "x86_64-linux"
-          "i686-linux"
-          # TODO: add workers for these platforms
-          # "aarch64-linux"
-          # "aarch64-darwin"
-          # "armv7l-linux"
-        ];
-        onPush.default.outputs.devShells = lib.mkForce { };
-      };
+      herculesCI =
+        { lib, ... }:
+        {
+          ciSystems = [
+            "x86_64-linux"
+            "i686-linux"
+            # TODO: add workers for these platforms
+            # "aarch64-linux"
+            # "aarch64-darwin"
+            # "armv7l-linux"
+          ];
+          onPush.default.outputs.devShells = lib.mkForce { };
+        };
     };
 }

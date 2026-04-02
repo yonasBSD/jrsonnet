@@ -1,3 +1,4 @@
+{ rustfmt }:
 {
   settings.global.excludes = [
     "*.jsonnet"
@@ -5,6 +6,9 @@
   ];
 
   programs.nixfmt.enable = true;
-  programs.rustfmt.enable = true;
+  programs.rustfmt = {
+    enable = true;
+    package = rustfmt;
+  };
   programs.taplo.enable = true;
 }
