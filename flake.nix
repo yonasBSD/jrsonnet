@@ -175,10 +175,11 @@
       herculesCI = { lib, ... }: {
         ciSystems = [
           "x86_64-linux"
-          "aarch64-linux"
-          "aarch64-darwin"
-          "armv7l-linux"
           "i686-linux"
+          # TODO: add workers for these platforms
+          # "aarch64-linux"
+          # "aarch64-darwin"
+          # "armv7l-linux"
         ];
         onPush.default.outputs.devShells = lib.mkForce { };
       };
