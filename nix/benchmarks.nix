@@ -53,7 +53,7 @@ let
 in
 stdenv.mkDerivation {
   name = "benchmarks";
-  __impure = true;
+  # __impure = true; # not supported by hercules-ci
   unpackPhase = "true";
 
   buildInputs = [
