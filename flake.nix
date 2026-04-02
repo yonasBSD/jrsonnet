@@ -15,6 +15,10 @@
       inputs.flake-parts.follows = "flake-parts";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     crane.url = "github:ipetkov/crane";
     shelly.url = "github:CertainLach/shelly";
   };
@@ -40,6 +44,7 @@
           };
           rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
           craneLib = (inputs.crane.mkLib pkgs).overrideToolchain rust;
+          treefmt = (inputs.treefmt-nix.lib.evalModule pkgs ./treefmt.nix).config.build;
         in
         {
           legacyPackages = {
@@ -145,6 +150,8 @@
               ];
             };
           };
+          checks.formatting = treefmt.check inputs.self;
+          formatter = treefmt.wrapper;
           shelly.shells.default = {
             factory = craneLib.devShell;
             packages =
