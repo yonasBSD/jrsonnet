@@ -186,6 +186,10 @@
               ];
           };
         };
+      hercules-ci.cargo-publish = {
+        enable = true;
+        secretName = "crates-io";
+      };
       hercules-ci.flake-update = {
         enable = true;
         baseMerge.enable = true;
