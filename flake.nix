@@ -165,6 +165,15 @@
               ];
           };
         };
-      herculesCI = { };
+      herculesCI = { lib, ... }: {
+        ciSystems = [
+          "x86_64-linux"
+          "aarch64-linux"
+          "aarch64-darwin"
+          "armv7l-linux"
+          "i686-linux"
+        ];
+        onPush.default.outputs.devShells = lib.mkForce { };
+      };
     };
 }
