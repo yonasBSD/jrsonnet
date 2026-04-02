@@ -186,6 +186,14 @@
               ];
           };
         };
+      hercules-ci.flake-update = {
+        enable = true;
+        baseMerge.enable = true;
+        baseMerge.method = "fast-forward";
+        when = {
+          dayOfWeek = [ "Sat" ];
+        };
+      };
       herculesCI =
         { lib, config, ... }:
         {
