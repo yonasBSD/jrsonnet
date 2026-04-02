@@ -187,7 +187,7 @@
           };
         };
       herculesCI =
-        { lib, ... }:
+        { lib, config, ... }:
         {
           ciSystems = [
             "x86_64-linux"
@@ -198,6 +198,9 @@
             # "armv7l-linux"
           ];
           onPush.default.outputs.devShells = lib.mkForce { };
+          onPush.default.outputs.packages.x86_64-linux.benchmarks-against-release = lib.mkForce { };
+          onPush.default.outputs.packages.x86_64-linux.benchmarks-quick = lib.mkForce { };
+          onPush.default.outputs.packages.x86_64-linux.benchmarks-quick-against-release = lib.mkForce { };
         };
     };
 }
