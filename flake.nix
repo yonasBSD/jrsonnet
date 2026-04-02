@@ -191,7 +191,8 @@
         {
           ciSystems = [
             "x86_64-linux"
-            "i686-linux"
+            # cargo wants libatomic, bug in fenix?
+            # "i686-linux"
             # TODO: add workers for these platforms
             # "aarch64-linux"
             # "aarch64-darwin"
@@ -201,6 +202,10 @@
           onPush.default.outputs.packages.x86_64-linux.benchmarks-against-release = lib.mkForce { };
           onPush.default.outputs.packages.x86_64-linux.benchmarks-quick = lib.mkForce { };
           onPush.default.outputs.packages.x86_64-linux.benchmarks-quick-against-release = lib.mkForce { };
+          onPush.default.outputs.packages.x86_64-linux.jrsonnet-release = lib.mkForce { };
+          onPush.default.outputs.packages.i686-linux.jrsonnet-release = lib.mkForce { };
+          onPush.default.outputs.formatter.i686-linux = lib.mkForce { };
+          onPush.default.outputs.checks.i686-linux = lib.mkForce { };
         };
     };
 }
