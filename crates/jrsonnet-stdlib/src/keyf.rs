@@ -1,6 +1,8 @@
-use jrsonnet_evaluator::function::{CallLocation, FuncVal, PreparedFuncVal};
-use jrsonnet_evaluator::typed::{ComplexValType, FromUntyped, Typed, ValType};
-use jrsonnet_evaluator::{Error, Result, Thunk, Val};
+use jrsonnet_evaluator::{
+	Error, Result, Thunk, Val,
+	function::{CallLocation, FuncVal, PreparedFuncVal},
+	typed::{ComplexValType, FromUntyped, Typed, ValType},
+};
 
 #[derive(Default, Clone)]
 pub enum KeyF {

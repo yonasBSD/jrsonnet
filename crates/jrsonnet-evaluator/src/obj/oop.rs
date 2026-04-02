@@ -1,21 +1,25 @@
-use std::cell::{Cell, RefCell};
-use std::ops::ControlFlow;
-use std::{fmt, mem};
-
-use crate::function::{CallLocation, FuncVal};
-use crate::gc::WithCapacityExt as _;
-use crate::{
-	bail, error::ErrorKind::*, in_frame, CcUnbound, MaybeUnbound, Result, Thunk, Unbound, Val,
+use std::{
+	cell::{Cell, RefCell},
+	fmt, mem,
+	ops::ControlFlow,
 };
+
 use jrsonnet_gcmodule::{Cc, Trace};
 use jrsonnet_ir::IStr;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::ordering::{FieldIndex, SuperDepth};
 use super::{
 	CcObjectAssertion, CcObjectCore, EnumFields, EnumFieldsHandler, FieldVisibility, GetFor,
 	HasFieldIncludeHidden, ObjMember, ObjMemberBuilder, ObjValue, ObjValueInner, ObjectAssertion,
 	ObjectCore, OmitFieldsCore, SupThis,
+	ordering::{FieldIndex, SuperDepth},
+};
+use crate::{
+	CcUnbound, MaybeUnbound, Result, Thunk, Unbound, Val, bail,
+	error::ErrorKind::*,
+	function::{CallLocation, FuncVal},
+	gc::WithCapacityExt as _,
+	in_frame,
 };
 
 #[allow(clippy::module_name_repetitions)]

@@ -1,12 +1,13 @@
+use std::rc::Rc;
+
 use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_ir::{
-	unescape, ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BindSpec, CompSpec, Destruct,
-	DestructRest, Expr, ExprParam, ExprParams, FieldMember, FieldName, ForSpecData, IStr, IfElse,
-	IfSpecData, ImportKind, IndexPart, LiteralType, Member, ObjBody, ObjComp, ObjMembers, Slice,
-	SliceDesc, Source, Span, Spanned, Visibility,
+	ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BindSpec, CompSpec, Destruct, DestructRest, Expr,
+	ExprParam, ExprParams, FieldMember, FieldName, ForSpecData, IStr, IfElse, IfSpecData,
+	ImportKind, IndexPart, LiteralType, Member, ObjBody, ObjComp, ObjMembers, Slice, SliceDesc,
+	Source, Span, Spanned, Visibility, unescape,
 };
 use peg::parser;
-use std::rc::Rc;
 
 pub struct ParserSettings {
 	pub source: Source,
@@ -58,7 +59,7 @@ parser! {
 		rule id() -> IStr = v:$(quiet!{ !reserved() alpha() (alpha() / digit())*} / expected!("<identifier>")) { v.into() }
 
 		rule keyword(id: &'static str) -> ()
-			= ##parse_string_literal(id) end_of_ident()
+			= #parse_string_literal(id) end_of_ident()
 
 		pub rule param(s: &ParserSettings) -> ExprParam = destruct:destruct(s) expr:(_ "=" _ expr:expr(s){expr})? { ExprParam { destruct, default: expr.map(Rc::new) } }
 		pub rule params(s: &ParserSettings) -> ExprParams
@@ -429,7 +430,7 @@ mod tests {
 	use insta::{assert_snapshot, glob};
 	use jrsonnet_ir::{IStr, Source};
 
-	use crate::{parse, ParserSettings};
+	use crate::{ParserSettings, parse};
 
 	#[test]
 	fn snapshots() {

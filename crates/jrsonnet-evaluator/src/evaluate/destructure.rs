@@ -3,14 +3,13 @@ use std::{collections::HashMap, hash::BuildHasher};
 use jrsonnet_interner::IStr;
 use jrsonnet_ir::{BindSpec, Destruct};
 
-use crate::{
-	bail,
-	error::{ErrorKind::*, Result},
-	evaluate_method, evaluate_named_param, Context, Pending, Thunk, Val,
-};
-
 #[cfg(feature = "exp-preserve-order")]
 use crate::evaluate;
+use crate::{
+	Context, Pending, Thunk, Val, bail,
+	error::{ErrorKind::*, Result},
+	evaluate_method, evaluate_named_param,
+};
 
 #[allow(clippy::too_many_lines)]
 #[allow(unused_variables)]
@@ -107,9 +106,10 @@ pub fn destruct<H: BuildHasher>(
 		}
 		#[cfg(feature = "exp-destruct")]
 		Destruct::Object { fields, rest } => {
-			use crate::ObjValueBuilder;
 			use jrsonnet_ir::DestructRest;
 			use rustc_hash::FxHashSet;
+
+			use crate::ObjValueBuilder;
 
 			let captured_fields: FxHashSet<_> = fields.iter().map(|f| f.0.clone()).collect();
 			let field_names: Vec<_> = fields

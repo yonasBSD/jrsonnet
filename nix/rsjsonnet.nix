@@ -16,7 +16,7 @@ rustPlatform.buildRustPackage rec {
 
   cargoHash = "sha256-0IDAxm4J2rEqfUGNYoQTP0RPrEZe4YPe2E6TT7A4THo=";
 
-  nativeBuildInputs = [makeWrapper];
+  nativeBuildInputs = [ makeWrapper ];
 
   postInstall = ''
     wrapProgram $out/bin/rsjsonnet --add-flags "--max-stack=200000"

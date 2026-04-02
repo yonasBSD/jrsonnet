@@ -174,9 +174,14 @@ stdenv.mkDerivation {
         echo "* C++: $(jsonnet --version)" >> $out
         echo "* Scala (native/GraalVM): $(sjsonnet-native 2>&1 | grep -oP 'Sjsonnet \S+')" >> $out
         echo "* Rust (alternative): rsjsonnet ${rsjsonnet.version} (${rsjsonnet.src.rev})" >> $out
-        ${concatStringsSep "\n" (forEach jrsonnetVariants (variant:
-          "echo \"* Rust${if variant.name != "" then " (${variant.name})" else ""}: $(${variant.drv}/bin/jrsonnet --version 2>&1)\" >> $out"
-        ))}
+        ${concatStringsSep "\n" (
+          forEach jrsonnetVariants (
+            variant:
+            "echo \"* Rust${
+              if variant.name != "" then " (${variant.name})" else ""
+            }: $(${variant.drv}/bin/jrsonnet --version 2>&1)\" >> $out"
+          )
+        )}
         echo "====" >> $out
         echo >> $out
       ''}

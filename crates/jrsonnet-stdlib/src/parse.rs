@@ -1,4 +1,4 @@
-use jrsonnet_evaluator::{function::builtin, runtime_error, IStr, Result, Val};
+use jrsonnet_evaluator::{IStr, Result, Val, function::builtin, runtime_error};
 
 #[builtin]
 pub fn builtin_parse_json(str: IStr) -> Result<Val> {

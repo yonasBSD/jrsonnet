@@ -6,9 +6,9 @@ mod yaml;
 
 pub use ini::IniFormat;
 use jrsonnet_evaluator::{
-	function::builtin,
-	manifest::{escape_string_json, JsonFormat, YamlStreamFormat},
 	IStr, ObjValue, Result, Val,
+	function::builtin,
+	manifest::{JsonFormat, YamlStreamFormat, escape_string_json},
 };
 pub use python::{PythonFormat, PythonVarsFormat};
 pub use toml::TomlFormat;

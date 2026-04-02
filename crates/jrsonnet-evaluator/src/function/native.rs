@@ -1,14 +1,14 @@
 use std::marker::PhantomData;
 
 use jrsonnet_gcmodule::Trace;
+use jrsonnet_types::{ComplexValType, ValType};
 
 use super::PreparedFuncVal;
 use crate::{
+	CallLocation, Result, Val,
 	function::FuncVal,
 	typed::{FromUntyped, IntoUntyped, Typed},
-	CallLocation, Result, Val,
 };
-use jrsonnet_types::{ComplexValType, ValType};
 
 #[derive(Debug, Trace, Clone)]
 pub struct NativeFn<D: 'static>(pub(crate) PreparedFuncVal, PhantomData<D>);

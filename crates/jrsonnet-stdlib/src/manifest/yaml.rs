@@ -1,9 +1,8 @@
 use std::{borrow::Cow, fmt::Write};
 
 use jrsonnet_evaluator::{
-	bail, in_description_frame,
-	manifest::{escape_string_json_buf, ManifestFormat},
-	Result, ResultExt, Val,
+	Result, ResultExt, Val, bail, in_description_frame,
+	manifest::{ManifestFormat, escape_string_json_buf},
 };
 
 pub struct YamlFormat<'s> {

@@ -1,13 +1,12 @@
 use std::{cell::RefCell, collections::BTreeSet};
 
 use jrsonnet_evaluator::{
-	bail,
+	Either, IStr, ObjValue, ObjValueBuilder, ResultExt, Thunk, Val, bail,
 	error::{ErrorKind::*, Result},
-	function::{builtin, CallLocation, FuncVal},
+	function::{CallLocation, FuncVal, builtin},
 	manifest::JsonFormat,
 	typed::{Either2, Either4},
-	val::{equals, ArrValue},
-	Either, IStr, ObjValue, ObjValueBuilder, ResultExt, Thunk, Val,
+	val::{ArrValue, equals},
 };
 use jrsonnet_gcmodule::Cc;
 
@@ -202,7 +201,9 @@ pub fn builtin_merge_patch(target: Val, patch: Val) -> Result<Val> {
 	for field in target_fields.union(&patch_fields) {
 		let Some(field_patch) = patch.get(field.clone())? else {
 			// All lazy fields might be unified into a single filtered object core instead of creating a thunk per, but this implementation is good enough.
-			let target_field = target.get_lazy(field.clone()).expect("we're iterating over fields union, if field is missing in patch - it exists in target");
+			let target_field = target.get_lazy(field.clone()).expect(
+				"we're iterating over fields union, if field is missing in patch - it exists in target",
+			);
 			out.field(field.clone()).thunk(target_field);
 			continue;
 		};

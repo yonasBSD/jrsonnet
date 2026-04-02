@@ -11,7 +11,7 @@ use std::{
 };
 
 use educe::Educe;
-use jrsonnet_gcmodule::{cc_dyn, Acyclic, Cc, Trace, Weak};
+use jrsonnet_gcmodule::{Acyclic, Cc, Trace, Weak, cc_dyn};
 use jrsonnet_interner::IStr;
 use jrsonnet_ir::Span;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -22,13 +22,13 @@ pub use jrsonnet_ir::Visibility;
 pub use oop::ObjValueBuilder;
 
 use crate::{
+	CcUnbound, MaybeUnbound, Result, Thunk, Unbound, Val,
 	arr::{PickObjectKeyValues, PickObjectValues},
 	bail,
-	error::{suggest_object_fields, ErrorKind::*},
+	error::{ErrorKind::*, suggest_object_fields},
 	identity_hash,
 	operator::evaluate_add_op,
 	val::{ArrValue, ThunkValue},
-	CcUnbound, MaybeUnbound, Result, Thunk, Unbound, Val,
 };
 
 #[cfg(not(feature = "exp-preserve-order"))]

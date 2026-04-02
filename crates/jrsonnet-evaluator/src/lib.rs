@@ -40,7 +40,7 @@ pub use error::{Error, ErrorKind::*, Result, ResultExt};
 pub use evaluate::*;
 use function::CallLocation;
 pub use import::*;
-use jrsonnet_gcmodule::{cc_dyn, Cc, Trace};
+use jrsonnet_gcmodule::{Cc, Trace, cc_dyn};
 pub use jrsonnet_interner::{IBytes, IStr};
 pub use jrsonnet_ir as parser;
 use jrsonnet_ir::{Expr, Source, SourcePath};

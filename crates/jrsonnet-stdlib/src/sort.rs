@@ -3,11 +3,10 @@
 use std::cmp::Ordering;
 
 use jrsonnet_evaluator::{
-	bail,
+	Result, Thunk, Val, bail,
 	function::builtin,
 	operator::evaluate_compare_op,
-	val::{equals, ArrValue},
-	Result, Thunk, Val,
+	val::{ArrValue, equals},
 };
 use jrsonnet_ir::BinaryOpType;
 

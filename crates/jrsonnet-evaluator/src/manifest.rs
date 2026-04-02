@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fmt::Write, ptr};
 
-use crate::{bail, in_description_frame, Result, ResultExt, Val};
+use crate::{Result, ResultExt, Val, bail, in_description_frame};
 
 pub trait ManifestFormat {
 	fn manifest_buf(&self, val: Val, buf: &mut String) -> Result<()>;

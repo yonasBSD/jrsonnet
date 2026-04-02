@@ -6,8 +6,8 @@ use jrsonnet_interner::IStr;
 use rustc_hash::FxHashMap;
 
 use crate::{
-	error::ErrorKind::*, gc::WithCapacityExt as _, map::LayeredHashMap, ObjValue, Pending, Result,
-	SupThis, Thunk, Val,
+	ObjValue, Pending, Result, SupThis, Thunk, Val, error::ErrorKind::*, gc::WithCapacityExt as _,
+	map::LayeredHashMap,
 };
 /// Context keeps information about current lexical code location
 ///

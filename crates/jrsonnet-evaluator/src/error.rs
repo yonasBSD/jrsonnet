@@ -7,11 +7,11 @@ use jrsonnet_types::ValType;
 use thiserror::Error;
 
 use crate::{
+	ObjValue, ResolvePathOwned,
 	function::{CallLocation, FunctionSignature, ParamName},
 	stdlib::format::FormatError,
 	typed::TypeLocError,
 	val::ConvertNumValueError,
-	ObjValue, ResolvePathOwned,
 };
 
 #[derive(Debug, Clone)]
@@ -78,7 +78,10 @@ pub(crate) fn suggest_object_fields(v: &ObjValue, key: IStr) -> Vec<IStr> {
 		if conf < 0.8 {
 			continue;
 		}
-		assert!(field.as_str() != key.as_str(), "looks like string pooling failure, please write any info regarding this crash to https://github.com/CertainLach/jrsonnet/issues/113, thanks!");
+		assert!(
+			field.as_str() != key.as_str(),
+			"looks like string pooling failure, please write any info regarding this crash to https://github.com/CertainLach/jrsonnet/issues/113, thanks!"
+		);
 
 		heap.push((conf, field));
 	}
@@ -271,11 +274,11 @@ impl Error {
 }
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		writeln!(f, "{}", self.0 .0)?;
-		for el in &self.0 .1 .0 {
+		writeln!(f, "{}", self.0.0)?;
+		for el in &self.0.1.0 {
 			write!(f, "\t{}", el.desc)?;
 			if let Some(loc) = &el.location {
-				write!(f, "at {}", loc.0 .0 .0)?;
+				write!(f, "at {}", loc.0.0.0)?;
 				loc.0.map_source_locations(&[loc.1, loc.2]);
 			}
 			writeln!(f)?;

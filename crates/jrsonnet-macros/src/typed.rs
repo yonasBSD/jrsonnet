@@ -1,10 +1,13 @@
-use crate::names::Names;
-use crate::{extract_type_from_option, kw, parse_attr, type_is_path};
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::parse::{Parse, ParseStream};
-use syn::spanned::Spanned as _;
-use syn::{parenthesized, token, DeriveInput, Error, Ident, LitStr, Result, Token, Type};
+use syn::{
+	DeriveInput, Error, Ident, LitStr, Result, Token, Type, parenthesized,
+	parse::{Parse, ParseStream},
+	spanned::Spanned as _,
+	token,
+};
+
+use crate::{extract_type_from_option, kw, names::Names, parse_attr, type_is_path};
 
 #[derive(Default)]
 #[allow(clippy::struct_excessive_bools)]

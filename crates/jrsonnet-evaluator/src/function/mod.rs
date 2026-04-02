@@ -9,11 +9,11 @@ pub use jrsonnet_macros::builtin;
 use self::{
 	builtin::{Builtin, StaticBuiltin},
 	parse::{parse_builtin_call, parse_default_function_call, parse_function_call},
-	prepared::{parse_prepared_builtin_call, parse_prepared_function_call, PreparedCall},
+	prepared::{PreparedCall, parse_prepared_builtin_call, parse_prepared_function_call},
 };
 use crate::{
-	bail, error::ErrorKind::*, evaluate, evaluate_trivial, function::builtin::BuiltinFunc, Context,
-	Result, Thunk, Val,
+	Context, Result, Thunk, Val, bail, error::ErrorKind::*, evaluate, evaluate_trivial,
+	function::builtin::BuiltinFunc,
 };
 
 pub mod builtin;
@@ -21,10 +21,9 @@ mod native;
 mod parse;
 mod prepared;
 
+pub use jrsonnet_ir::function::*;
 pub use native::NativeFn;
 pub use prepared::PreparedFuncVal;
-
-pub use jrsonnet_ir::function::*;
 
 /// Function callsite location.
 /// Either from other jsonnet code, specified by expression location, or from native (without location).

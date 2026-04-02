@@ -9,7 +9,7 @@ use std::{
 	rc::Rc,
 };
 
-use jrsonnet_gcmodule::{cc_dyn, Acyclic, Cc, Trace};
+use jrsonnet_gcmodule::{Acyclic, Cc, Trace, cc_dyn};
 use jrsonnet_interner::IStr;
 pub use jrsonnet_macros::Thunk;
 use jrsonnet_types::ValType;
@@ -18,13 +18,12 @@ use thiserror::Error;
 
 pub use crate::arr::{ArrValue, ArrayLike};
 use crate::{
-	bail,
+	ObjValue, Result, SupThis, Unbound, WeakSupThis, bail,
 	error::{Error, ErrorKind::*},
 	function::FuncVal,
 	gc::WithCapacityExt as _,
 	manifest::{ManifestFormat, ToStringFormat},
 	typed::{BoundedUsize, MAX_SAFE_INTEGER, MIN_SAFE_INTEGER},
-	ObjValue, Result, SupThis, Unbound, WeakSupThis,
 };
 
 pub trait ThunkValue: Trace {

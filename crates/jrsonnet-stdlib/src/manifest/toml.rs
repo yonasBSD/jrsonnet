@@ -1,10 +1,9 @@
 use std::borrow::Cow;
 
 use jrsonnet_evaluator::{
-	bail, in_description_frame,
-	manifest::{escape_string_json_buf, ManifestFormat},
+	IStr, ObjValue, Result, ResultExt, Val, bail, in_description_frame,
+	manifest::{ManifestFormat, escape_string_json_buf},
 	val::ArrValue,
-	IStr, ObjValue, Result, ResultExt, Val,
 };
 
 pub struct TomlFormat<'s> {

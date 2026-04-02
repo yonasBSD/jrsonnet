@@ -3,7 +3,7 @@ use std::{cell::OnceCell, hash::Hasher, ptr::addr_of};
 use educe::Educe;
 use jrsonnet_gcmodule::{Cc, Trace};
 
-use crate::{bail, error::ErrorKind::InfiniteRecursionDetected, val::ThunkValue, Result};
+use crate::{Result, bail, error::ErrorKind::InfiniteRecursionDetected, val::ThunkValue};
 
 #[derive(Trace, Educe)]
 #[educe(Clone)]

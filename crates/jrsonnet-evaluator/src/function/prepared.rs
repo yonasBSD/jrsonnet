@@ -1,16 +1,14 @@
 use std::rc::Rc;
 
 use jrsonnet_gcmodule::{Acyclic, Trace};
-use jrsonnet_ir::function::FunctionSignature;
-use jrsonnet_ir::{ExprParams, IStr};
+use jrsonnet_ir::{ExprParams, IStr, function::FunctionSignature};
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use crate::destructure::destruct;
-use crate::gc::WithCapacityExt;
-use crate::{bail, error::ErrorKind::*, Result};
-use crate::{evaluate_named_param, Context, ContextBuilder, Pending, Thunk, Val};
-
 use super::{CallLocation, FuncVal};
+use crate::{
+	Context, ContextBuilder, Pending, Result, Thunk, Val, bail, destructure::destruct,
+	error::ErrorKind::*, evaluate_named_param, gc::WithCapacityExt,
+};
 
 #[derive(Debug, Trace, Clone)]
 pub struct PreparedFuncVal {

@@ -3,13 +3,13 @@ use std::{cell::Cell, fmt, rc::Rc};
 use rowan::{GreenNode, TextRange};
 
 use crate::{
+	AstToken, SyntaxKind,
+	SyntaxKind::*,
+	SyntaxNode, T, TS,
 	event::Event,
 	marker::{CompletedMarker, Marker},
 	nodes::{BinaryOperatorKind, Literal, Number, Text, UnaryOperatorKind},
 	token_set::SyntaxKindSet,
-	AstToken, SyntaxKind,
-	SyntaxKind::*,
-	SyntaxNode, T, TS,
 };
 
 pub struct Parse {
@@ -923,8 +923,7 @@ fn lhs_basic(p: &mut Parser) -> Result<CompletedMarker, CompletedMarker> {
 
 		let m = p.start();
 		p.bump();
-		let _ = expr_binding_power(p, right_binding_power)
-			.map(|v| v.precede(p).complete(p, EXPR));
+		let _ = expr_binding_power(p, right_binding_power).map(|v| v.precede(p).complete(p, EXPR));
 		m.complete(p, EXPR_UNARY)
 	} else if p.at(T!['(']) {
 		let m = p.start();

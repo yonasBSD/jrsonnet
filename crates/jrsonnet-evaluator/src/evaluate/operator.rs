@@ -3,14 +3,14 @@ use std::cmp::Ordering;
 use jrsonnet_ir::{BinaryOpType, Expr, UnaryOpType};
 
 use crate::{
+	Context, Result, Val,
 	arr::ArrValue,
 	bail,
 	error::ErrorKind::*,
 	evaluate,
 	stdlib::std_format,
 	typed::IntoUntyped as _,
-	val::{equals, StrValue},
-	Context, Result, Val,
+	val::{StrValue, equals},
 };
 
 pub fn evaluate_unary_op(op: UnaryOpType, b: &Val) -> Result<Val> {

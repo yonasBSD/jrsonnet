@@ -2,17 +2,17 @@ use std::borrow::Cow;
 
 use jrsonnet_interner::IStr;
 use serde::{
+	Deserialize, Serialize, Serializer,
 	de::{self, Visitor},
 	ser::{
 		Error, SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
 		SerializeTupleStruct, SerializeTupleVariant,
 	},
-	Deserialize, Serialize, Serializer,
 };
 
 use crate::{
-	arr::ArrValue, in_description_frame, runtime_error, val::NumValue, Error as JrError, ObjValue,
-	ObjValueBuilder, Result, Val,
+	Error as JrError, ObjValue, ObjValueBuilder, Result, Val, arr::ArrValue, in_description_frame,
+	runtime_error, val::NumValue,
 };
 
 impl<'de> Deserialize<'de> for Val {

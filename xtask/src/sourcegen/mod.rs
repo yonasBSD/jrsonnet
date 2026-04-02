@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use anyhow::Result;
-use ast::{lower, AstSrc};
+use ast::{AstSrc, lower};
 use itertools::Itertools;
 use kinds::{KindsSrc, TokenKind};
 use proc_macro2::{Ident, Punct, Spacing, Span, TokenStream};
@@ -56,7 +56,9 @@ pub fn generate_ungrammar() -> Result<()> {
 						});
 					}
 					SpecialName::Error => {
-						panic!("error token ERROR_{name} must be explicitly defined in jsonnet_kinds()");
+						panic!(
+							"error token ERROR_{name} must be explicitly defined in jsonnet_kinds()"
+						);
 					}
 				}
 				continue;

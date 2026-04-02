@@ -2,12 +2,12 @@
 //! However, in our case we instead implement them in native, and implement native functions on top of core for backwards compatibility
 
 use jrsonnet_evaluator::{
+	IStr, Result, Val,
 	function::builtin,
 	operator::evaluate_mod_op,
 	stdlib::std_format,
 	typed::{Either, Either2},
-	val::{equals, primitive_equals, NumValue},
-	IStr, Result, Val,
+	val::{NumValue, equals, primitive_equals},
 };
 
 #[builtin]

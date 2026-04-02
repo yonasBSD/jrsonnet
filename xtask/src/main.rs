@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 mod sourcegen;
 
@@ -68,7 +68,11 @@ fn main() -> Result<()> {
 			if cachegrind {
 				let mut cachegrind_out = out.path().to_owned();
 				cachegrind_out.push("cachegrind.out.1");
-				cmd!(sh, "valgrind --tool=cachegrind --cachegrind-out-file={cachegrind_out} {built} {args...}").run()?;
+				cmd!(
+					sh,
+					"valgrind --tool=cachegrind --cachegrind-out-file={cachegrind_out} {built} {args...}"
+				)
+				.run()?;
 				cmd!(sh, "kcachegrind {cachegrind_out}").run()?;
 			}
 

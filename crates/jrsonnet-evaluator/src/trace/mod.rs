@@ -10,7 +10,7 @@ use jrsonnet_ir::CodeLocation;
 #[cfg(feature = "explaining-traces")]
 use jrsonnet_ir::Span;
 
-use crate::{error::ErrorKind, Error};
+use crate::{Error, error::ErrorKind};
 
 /// The way paths should be displayed
 #[derive(Clone, Trace)]
@@ -258,7 +258,7 @@ impl TraceFormat for HiDocFormat {
 		struct ResetData {
 			loc: Span,
 		}
-		use hi_doc::{source_to_ansi, Formatting, SnippetBuilder, Text};
+		use hi_doc::{Formatting, SnippetBuilder, Text, source_to_ansi};
 
 		write!(out, "{}", error.error())?;
 		if let ErrorKind::ImportSyntaxError { path, error } = error.error() {

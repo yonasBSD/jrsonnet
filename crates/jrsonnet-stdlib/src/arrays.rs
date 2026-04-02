@@ -1,12 +1,11 @@
 #![allow(non_snake_case)]
 
 use jrsonnet_evaluator::{
-	bail,
-	function::{builtin, FuncVal, NativeFn},
+	Either, IStr, ObjValue, ObjValueBuilder, Result, ResultExt, Thunk, Val, bail,
+	function::{FuncVal, NativeFn, builtin},
 	runtime_error,
 	typed::{BoundedI32, BoundedUsize, Either2, FromUntyped},
-	val::{equals, ArrValue, IndexableVal},
-	Either, IStr, ObjValue, ObjValueBuilder, Result, ResultExt, Thunk, Val,
+	val::{ArrValue, IndexableVal, equals},
 };
 
 pub fn eval_on_empty(on_empty: Option<Thunk<Val>>) -> Result<Val> {
