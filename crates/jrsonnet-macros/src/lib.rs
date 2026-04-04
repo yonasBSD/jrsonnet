@@ -127,6 +127,7 @@ mod kw {
 	syn::custom_keyword!(flatten);
 	syn::custom_keyword!(add);
 	syn::custom_keyword!(hide);
+	syn::custom_keyword!(method);
 	syn::custom_keyword!(ok);
 }
 
@@ -381,18 +382,8 @@ fn builtin_inner(attr: BuiltinAttrs, mut fun: ItemFn) -> syn::Result<TokenStream
 
 	let name = &fun.sig.ident;
 	let vis = &fun.vis;
-	let static_ext = if attr.fields.is_empty() {
-		quote! {
-			impl #name {
-				pub const INST: &'static dyn StaticBuiltin = &#name {};
-			}
-			impl StaticBuiltin for #name {}
-		}
-	} else {
-		quote! {}
-	};
 	let static_derive_copy = if attr.fields.is_empty() {
-		quote! {, Copy}
+		quote! {, Copy, Default}
 	} else {
 		quote! {}
 	};
@@ -409,7 +400,7 @@ fn builtin_inner(attr: BuiltinAttrs, mut fun: ItemFn) -> syn::Result<TokenStream
 		const _: () = {
 			use ::jrsonnet_evaluator::{
 				State, Val,
-				function::{builtin::{Builtin, StaticBuiltin}, FunctionSignature, ParamParse, ParamName, ParamDefault, CallLocation},
+				function::{builtin::Builtin, FunctionSignature, ParamParse, ParamName, ParamDefault, CallLocation},
 				Result, Context, typed::{Typed, FromUntyped, IntoUntypedResult},
 				parser::Span, params, Thunk,
 			};
@@ -417,7 +408,6 @@ fn builtin_inner(attr: BuiltinAttrs, mut fun: ItemFn) -> syn::Result<TokenStream
 				#(#params_desc)*
 			);
 
-			#static_ext
 			impl Builtin for #name
 			where
 				Self: 'static

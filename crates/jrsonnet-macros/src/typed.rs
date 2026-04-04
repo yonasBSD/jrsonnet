@@ -1,10 +1,10 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-	DeriveInput, Error, Ident, LitStr, Result, Token, Type, parenthesized,
+	parenthesized,
 	parse::{Parse, ParseStream},
 	spanned::Spanned as _,
-	token,
+	token, DeriveInput, Error, Ident, LitStr, Result, Token, Type,
 };
 
 use crate::{extract_type_from_option, kw, names::Names, parse_attr, type_is_path};
@@ -22,6 +22,8 @@ struct TypedAttr {
 	add: bool,
 	// Should it be `field::` instead of `field:`
 	hide: bool,
+	// Builtin value
+	method: bool,
 }
 impl Parse for TypedAttr {
 	fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -64,6 +66,9 @@ impl Parse for TypedAttr {
 			} else if lookahead.peek(kw::hide) {
 				input.parse::<kw::hide>()?;
 				out.hide = true;
+			} else if lookahead.peek(kw::method) {
+				input.parse::<kw::method>()?;
+				out.method = true;
 			} else if input.is_empty() {
 				break;
 			} else {
@@ -134,7 +139,7 @@ impl TypedField {
 	}
 
 	fn expand_field(&self) -> Option<TokenStream> {
-		if self.is_option {
+		if self.is_option || self.attr.method {
 			return None;
 		}
 		let name = self.name()?;
@@ -256,7 +261,11 @@ impl TypedField {
 				} else {
 					quote! {}
 				};
-				let value = if self.is_lazy {
+				let value = if self.attr.method {
+					quote! {
+						out.method(__names[#name].clone(), value);
+					}
+				} else if self.is_lazy {
 					quote! {
 						out.field(__names[#name].clone())
 							#hide
