@@ -17,7 +17,11 @@ pub fn eval_on_empty(on_empty: Option<Thunk<Val>>) -> Result<Val> {
 }
 
 #[builtin]
-pub fn builtin_make_array(sz: BoundedI32<0, { i32::MAX }>, func: FuncVal) -> Result<ArrValue> {
+pub fn builtin_make_array(
+	// Can't use usize because range_exclusive is over i32
+	sz: BoundedI32<0, { i32::MAX }>,
+	func: FuncVal,
+) -> Result<ArrValue> {
 	if *sz == 0 {
 		return Ok(ArrValue::empty());
 	}
@@ -25,6 +29,7 @@ pub fn builtin_make_array(sz: BoundedI32<0, { i32::MAX }>, func: FuncVal) -> Res
 		// TODO: Different mapped array impl avoiding allocating unnecessary vals
 		|| Ok(ArrValue::range_exclusive(0, *sz).map(FromUntyped::from_untyped(Val::Func(func))?)),
 		|trivial| {
+			#[expect(clippy::cast_sign_loss, reason = "sz is bounded to be larger than 0")]
 			let mut out = Vec::with_capacity(*sz as usize);
 			for _ in 0..*sz {
 				out.push(trivial.clone());
@@ -363,6 +368,10 @@ pub fn builtin_avg(arr: Vec<f64>, onEmpty: Option<Thunk<Val>>) -> Result<Val> {
 	if arr.is_empty() {
 		return eval_on_empty(onEmpty);
 	}
+	#[expect(
+		clippy::cast_precision_loss,
+		reason = "array sizes are bounded to i32 len"
+	)]
 	Ok(Val::try_num(arr.iter().sum::<f64>() / (arr.len() as f64))?)
 }
 
@@ -378,6 +387,11 @@ pub fn builtin_remove_at(arr: ArrValue, at: i32) -> Result<ArrValue> {
 pub fn builtin_remove(arr: ArrValue, elem: Val) -> Result<ArrValue> {
 	for (index, item) in arr.iter().enumerate() {
 		if equals(&item?, &elem)? {
+			#[expect(
+				clippy::cast_possible_truncation,
+				clippy::cast_possible_wrap,
+				reason = "array sizes are bounded to i32 len"
+			)]
 			return builtin_remove_at(arr.clone(), index as i32);
 		}
 	}

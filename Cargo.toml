@@ -122,11 +122,6 @@ needless_pass_by_value = "allow"
 wildcard_imports = "allow"
 enum_glob_use = "allow"
 module_name_repetitions = "allow"
-# TODO: fix individual issues, however this works as intended almost everywhere
-cast_precision_loss = "allow"
-cast_possible_wrap = "allow"
-cast_possible_truncation = "allow"
-cast_sign_loss = "allow"
 # False positives
 # https://github.com/rust-lang/rust-clippy/issues/6902
 use_self = "allow"

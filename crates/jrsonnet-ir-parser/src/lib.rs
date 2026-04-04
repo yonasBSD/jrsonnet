@@ -638,6 +638,7 @@ fn objinside(p: &mut Parser<'_>) -> Result<ObjBody> {
 	}
 }
 
+#[allow(clippy::too_many_lines)]
 fn expr_basic(p: &mut Parser<'_>) -> Result<Expr> {
 	if let Some(lit) = literal(p) {
 		return Ok(Expr::Literal(lit));
@@ -764,7 +765,6 @@ fn expr_basic(p: &mut Parser<'_>) -> Result<Expr> {
 		}
 
 		SyntaxKind::IDENT => {
-			let text = p.text();
 			let n = spanned(p, |p| {
 				let s: IStr = p.text().into();
 				p.eat_any();
@@ -1005,8 +1005,9 @@ pub fn parse(str: &str, settings: &ParserSettings) -> Result<Expr> {
 }
 
 pub fn string_to_expr(s: IStr, settings: &ParserSettings) -> Spanned<Expr> {
-	let len = s.len();
-	Spanned::new(Expr::Str(s), Span(settings.source.clone(), 0, len as u32))
+	let len = u32::try_from(s.len()).expect("code size is limited by 4gb");
+
+	Spanned::new(Expr::Str(s), Span(settings.source.clone(), 0, len))
 }
 
 #[cfg(test)]

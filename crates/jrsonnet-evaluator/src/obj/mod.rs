@@ -792,6 +792,8 @@ impl ObjValue {
 			key,
 		})
 	}
+
+	#[allow(dead_code, reason = "used in object ...rest destructuring")]
 	pub(crate) fn as_standalone(&self) -> StandaloneSuperCore {
 		StandaloneSuperCore {
 			sup: CoreIdx {

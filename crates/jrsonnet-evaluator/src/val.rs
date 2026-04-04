@@ -295,8 +295,10 @@ impl IndexableVal {
 				};
 				let mut get_idx = |pos: Option<i32>, default| {
 					match pos {
-						Some(v) if v < 0 => get_len().saturating_sub((-v) as usize),
+						#[expect(clippy::cast_sign_loss, reason = "abs value is used")]
+						Some(v) if v < 0 => get_len().saturating_sub((-v as isize) as usize),
 						// No need to clamp, as iterator interface is used
+						#[expect(clippy::cast_sign_loss, reason = "abs value is used")]
 						Some(v) => v as usize,
 						None => default,
 					}
@@ -322,6 +324,10 @@ impl IndexableVal {
 			Self::Arr(arr) => Ok(Self::Arr(arr.clone().slice(
 				index,
 				end,
+				#[expect(
+					clippy::cast_possible_truncation,
+					reason = "overflow will result with skip too large which would be equivalent"
+				)]
 				step.map(|v| NonZeroU32::new(v.value() as u32).expect("bounded != 0")),
 			))),
 		}
@@ -446,6 +452,7 @@ impl NumValue {
 		if self.0 < MIN_SAFE_INTEGER || self.0 > MAX_SAFE_INTEGER {
 			bail!("numberic value outside of safe integer range for bitwise operation");
 		}
+		#[expect(clippy::cast_possible_truncation, reason = "intended")]
 		Ok(self.0 as i64)
 	}
 }
@@ -520,6 +527,7 @@ macro_rules! impl_try_num {
 			type Error = ConvertNumValueError;
 			#[inline]
 			fn try_from(value: $ty) -> Result<Self, ConvertNumValueError> {
+				#[expect(clippy::cast_precision_loss, reason = "precision loss is explicitly handled")]
 				let value = value as f64;
 				if value < MIN_SAFE_INTEGER {
 					return Err(ConvertNumValueError::Underflow)

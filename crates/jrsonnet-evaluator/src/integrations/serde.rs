@@ -69,12 +69,20 @@ impl<'de> Deserialize<'de> for Val {
 			where
 				E: de::Error,
 			{
+				#[expect(
+					clippy::cast_precision_loss,
+					reason = "this is how it works with stdlib functions"
+				)]
 				Ok(Val::Num(NumValue::new(v as f64).expect("no overflow")))
 			}
 			fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
 			where
 				E: de::Error,
 			{
+				#[expect(
+					clippy::cast_precision_loss,
+					reason = "this is how it works with stdlib functions"
+				)]
 				Ok(Val::Num(NumValue::new(v as f64).expect("no overflow")))
 			}
 
@@ -161,6 +169,10 @@ impl Serialize for Val {
 			Self::Num(n) => {
 				let n = n.get();
 				if n.fract() == 0.0 {
+					#[expect(
+						clippy::cast_possible_truncation,
+						reason = "no correct implementation is possible here; expected"
+					)]
 					let n = n as i64;
 					serializer.serialize_i64(n)
 				} else {

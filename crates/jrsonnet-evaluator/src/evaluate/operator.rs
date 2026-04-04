@@ -20,7 +20,8 @@ pub fn evaluate_unary_op(op: UnaryOpType, b: &Val) -> Result<Val> {
 		(Plus, Num(n)) => Val::Num(*n),
 		(Minus, Num(n)) => Val::try_num(-n.get())?,
 		(Not, Bool(v)) => Bool(!v),
-		(BitNot, Num(n)) => Val::try_num(!(n.get() as i64) as f64)?,
+		#[expect(clippy::cast_precision_loss, reason = "as spec")]
+		(BitNot, Num(n)) => Val::try_num(!n.truncate_for_bitwise()? as f64)?,
 		(op, o) => bail!(UnaryOperatorDoesNotOperateOnType(op, o.value_type())),
 	})
 }
@@ -73,7 +74,17 @@ pub fn evaluate_sub_op(a: &Val, b: &Val) -> Result<Val> {
 pub fn evaluate_mul_op(a: &Val, b: &Val) -> Result<Val> {
 	use Val::*;
 	Ok(match (a, b) {
+		#[expect(
+			clippy::cast_possible_truncation,
+			clippy::cast_sign_loss,
+			reason = "should not be used with values too large, negative == 0"
+		)]
 		(Str(s), Num(c)) => Val::string(s.to_string().repeat(c.get() as usize)),
+		#[expect(
+			clippy::cast_possible_truncation,
+			clippy::cast_sign_loss,
+			reason = "should not be used with values too large"
+		)]
 		(Num(c), Str(s)) => Val::string(s.to_string().repeat(c.get() as usize)),
 
 		(Num(v1), Num(v2)) => Val::try_num(v1.get() * v2.get())?,
@@ -218,13 +229,28 @@ pub fn evaluate_binary_op_normal(a: &Val, op: BinaryOpType, b: &Val) -> Result<V
 		(a, Div, b) => evaluate_div_op(a, b)?,
 		(a, Mod, b) => evaluate_mod_op(a, b)?,
 
-		(Num(v1), BitAnd, Num(v2)) => {
+		(Num(v1), BitAnd, Num(v2)) =>
+		{
+			#[expect(
+				clippy::cast_precision_loss,
+				reason = "values are within safe integer ranges"
+			)]
 			Val::try_num((v1.truncate_for_bitwise()? & v2.truncate_for_bitwise()?) as f64)?
 		}
-		(Num(v1), BitOr, Num(v2)) => {
+		(Num(v1), BitOr, Num(v2)) =>
+		{
+			#[expect(
+				clippy::cast_precision_loss,
+				reason = "values are within safe integer ranges"
+			)]
 			Val::try_num((v1.truncate_for_bitwise()? | v2.truncate_for_bitwise()?) as f64)?
 		}
-		(Num(v1), BitXor, Num(v2)) => {
+		(Num(v1), BitXor, Num(v2)) =>
+		{
+			#[expect(
+				clippy::cast_precision_loss,
+				reason = "values are within safe integer ranges"
+			)]
 			Val::try_num((v1.truncate_for_bitwise()? ^ v2.truncate_for_bitwise()?) as f64)?
 		}
 		(Num(v1), Lhs, Num(v2)) => {
@@ -234,16 +260,28 @@ pub fn evaluate_binary_op_normal(a: &Val, op: BinaryOpType, b: &Val) -> Result<V
 			let base = v1.truncate_for_bitwise()?;
 			let exp = v2.truncate_for_bitwise()? % 64;
 
+			#[expect(clippy::cast_sign_loss, reason = "exp is positive")]
 			if exp >= 1 && base >= (1i64 << (63 - exp as u32)) {
 				bail!("left shift would overflow")
 			}
+			#[expect(
+				clippy::cast_precision_loss,
+				clippy::cast_sign_loss,
+				reason = "checked as original impl"
+			)]
 			Val::try_num(base.wrapping_shl(exp as u32) as f64)?
 		}
 		(Num(v1), Rhs, Num(v2)) => {
 			if v2.get() < 0.0 {
 				bail!("shift by negative exponent")
 			}
+			#[expect(
+				clippy::cast_sign_loss,
+				clippy::cast_possible_truncation,
+				reason = "checked as original impl"
+			)]
 			let exp = ((v2.get() as i64) & 63) as u32;
+			#[expect(clippy::cast_precision_loss, reason = "checked as upstream impl")]
 			Val::try_num(v1.truncate_for_bitwise()?.wrapping_shr(exp) as f64)?
 		}
 

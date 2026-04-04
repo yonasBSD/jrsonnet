@@ -129,6 +129,7 @@ impl TraceFormat for CompactFormat {
 			} else {
 				false
 			};
+			#[expect(clippy::cast_possible_truncation, reason = "code is limited by 4gb")]
 			let mut location = path
 				.map_source_locations(&[offset as u32])
 				.into_iter()

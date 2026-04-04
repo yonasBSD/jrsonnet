@@ -548,8 +548,18 @@ pub fn evaluate(ctx: Context, expr: &Expr) -> Result<Val> {
 							bail!(FractionalIndex)
 						}
 						if n < 0.0 {
-							bail!(ArrayBoundsError(n as isize, v.len()));
+							#[expect(
+								clippy::cast_possible_truncation,
+								reason = "it would be truncated anyway"
+							)]
+							let n = n as isize;
+							bail!(ArrayBoundsError(n, v.len()));
 						}
+						#[expect(
+							clippy::cast_possible_truncation,
+							clippy::cast_sign_loss,
+							reason = "n is checked postive"
+						)]
 						v.get(n as usize)?
 							.ok_or_else(|| ArrayBoundsError(n as isize, v.len()))?
 					}
@@ -568,18 +578,29 @@ pub fn evaluate(ctx: Context, expr: &Expr) -> Result<Val> {
 							bail!(FractionalIndex)
 						}
 						if n < 0.0 {
-							bail!(ArrayBoundsError(n as isize, s.into_flat().chars().count()));
+							#[expect(
+								clippy::cast_possible_truncation,
+								reason = "it would be truncated anyway"
+							)]
+							let n = n as isize;
+							bail!(ArrayBoundsError(n, s.into_flat().chars().count()));
 						}
+						#[expect(
+							clippy::cast_sign_loss,
+							clippy::cast_possible_truncation,
+							reason = "n is positive, overflow will truncate as expected"
+						)]
+						let n = n as usize;
 						let v: IStr = s
 							.clone()
 							.into_flat()
 							.chars()
-							.skip(n as usize)
+							.skip(n)
 							.take(1)
 							.collect::<String>()
 							.into();
 						if v.is_empty() {
-							bail!(StringBoundsError(n as usize, s.into_flat().chars().count()))
+							bail!(StringBoundsError(n, s.into_flat().chars().count()))
 						}
 						StrValue::Flat(v)
 					}),

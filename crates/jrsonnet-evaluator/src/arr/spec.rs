@@ -350,22 +350,26 @@ impl RangeArray {
 	pub fn new_inclusive(start: i32, end: i32) -> Self {
 		Self { start, end }
 	}
+	#[expect(
+		clippy::cast_sign_loss,
+		reason = "the math is valid with wrapping, sign loss works as intended"
+	)]
+	fn size(&self) -> usize {
+		(self.end as usize)
+			.wrapping_sub(self.start as usize)
+			.wrapping_add(1)
+	}
 	fn range(&self) -> impl ExactSizeIterator<Item = i32> + DoubleEndedIterator {
-		WithExactSize(
-			self.start..=self.end,
-			(self.end as usize)
-				.wrapping_sub(self.start as usize)
-				.wrapping_add(1),
-		)
+		WithExactSize(self.start..=self.end, self.size())
 	}
 }
 
 impl ArrayLike for RangeArray {
 	fn len(&self) -> usize {
-		self.range().len()
+		self.size()
 	}
 	fn is_empty(&self) -> bool {
-		self.range().len() == 0
+		self.size() == 0
 	}
 
 	fn get(&self, index: usize) -> Result<Option<Val>> {
@@ -431,6 +435,10 @@ impl MappedArray {
 	fn evaluate(&self, index: usize, value: Val) -> Result<Val> {
 		match &self.mapper {
 			ArrayMapper::Plain(f) => f.call(value),
+			#[expect(
+				clippy::cast_possible_truncation,
+				reason = "array len is limited to u31"
+			)]
 			ArrayMapper::WithIndex(f) => f.call(index as u32, value),
 		}
 	}

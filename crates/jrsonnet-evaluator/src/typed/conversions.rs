@@ -157,7 +157,9 @@ where
 	}
 }
 
+#[expect(clippy::cast_precision_loss, reason = "checked to not overflow")]
 pub const MAX_SAFE_INTEGER: f64 = ((1u64 << (f64::MANTISSA_DIGITS)) - 1) as f64;
+#[expect(clippy::cast_precision_loss, reason = "checked to not overflow")]
 pub const MIN_SAFE_INTEGER: f64 = (-((1i64 << (f64::MANTISSA_DIGITS)) - 1)) as f64;
 
 macro_rules! impl_int {
@@ -179,6 +181,7 @@ macro_rules! impl_int {
 								stringify!($ty)
 							)
 						}
+						#[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, reason = "checked by TYPE")]
 						Ok(n as Self)
 					}
 					_ => unreachable!(),
@@ -198,6 +201,7 @@ impl_int!(i8 u8 i16 u16 i32 u32);
 macro_rules! impl_bounded_int {
 	($($name:ident = $ty:ty)*) => {$(
 		#[derive(Clone, Copy)]
+		#[allow(clippy::cast_possible_truncation, reason = "overflow is api misuse")]
 		pub struct $name<const MIN: $ty, const MAX: $ty>($ty);
 		impl<const MIN: $ty, const MAX: $ty> $name<MIN, MAX> {
 			pub const fn new(value: $ty) -> Option<$name<MIN, MAX>> {
@@ -219,6 +223,7 @@ macro_rules! impl_bounded_int {
 		}
 
 		impl<const MIN: $ty, const MAX: $ty> Typed for $name<MIN, MAX> {
+			#[allow(clippy::cast_possible_truncation, clippy::cast_precision_loss, reason = "overflow is api misuse")]
 			const TYPE: &'static ComplexValType =
 				&ComplexValType::BoundedNumber(
 					Some(MIN as f64),
@@ -239,6 +244,7 @@ macro_rules! impl_bounded_int {
 								stringify!($ty)
 							)
 						}
+						#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "overflow is api misuse, the range is checked by TYPE")]
 						Ok(Self(n as $ty))
 					}
 					_ => unreachable!(),
@@ -318,6 +324,11 @@ impl FromUntyped for usize {
 				if n.trunc() != n {
 					bail!("cannot convert number with fractional part to usize")
 				}
+				#[allow(
+					clippy::cast_possible_truncation,
+					clippy::cast_sign_loss,
+					reason = "the range is checked by TYPE"
+				)]
 				Ok(n as Self)
 			}
 			_ => unreachable!(),

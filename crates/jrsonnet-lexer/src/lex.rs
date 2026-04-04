@@ -60,7 +60,10 @@ impl<'a> Iterator for Lexer<'a> {
 			range: {
 				let Range { start, end } = self.inner.span();
 
-				Span(start as u32, end as u32)
+				Span(
+					u32::try_from(start).expect("code size is limited by 4gb"),
+					u32::try_from(end).expect("code size is limited by 4gb"),
+				)
 			},
 		})
 	}

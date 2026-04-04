@@ -128,7 +128,12 @@ impl ArrValue {
 	#[must_use]
 	pub fn slice(self, index: Option<i32>, end: Option<i32>, step: Option<NonZeroU32>) -> Self {
 		let get_idx = |pos: Option<i32>, len: usize, default| match pos {
+			#[expect(
+				clippy::cast_sign_loss,
+				reason = "abs value is used, len is limited to u31"
+			)]
 			Some(v) if v < 0 => len.saturating_sub((-v) as usize),
+			#[expect(clippy::cast_sign_loss, reason = "abs value is used")]
 			Some(v) => (v as usize).min(len),
 			None => default,
 		};
@@ -142,7 +147,9 @@ impl ArrValue {
 
 		Self::new(SliceArray {
 			inner: self,
+			#[expect(clippy::cast_possible_truncation, reason = "len is limited to u31")]
 			from: index as u32,
+			#[expect(clippy::cast_possible_truncation, reason = "len is limited to u31")]
 			to: end as u32,
 			step: step.get(),
 		})

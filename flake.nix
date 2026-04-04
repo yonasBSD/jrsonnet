@@ -66,6 +66,7 @@
               "clippy"
               "rustc"
               "rust-src"
+              "rust-analyzer"
             ])
             rustfmt
           ];
