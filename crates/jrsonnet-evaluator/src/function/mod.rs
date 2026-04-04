@@ -9,11 +9,10 @@ pub use jrsonnet_macros::builtin;
 use self::{
 	builtin::Builtin,
 	parse::{parse_builtin_call, parse_default_function_call, parse_function_call},
-	prepared::{parse_prepared_builtin_call, parse_prepared_function_call, PreparedCall},
+	prepared::{PreparedCall, parse_prepared_builtin_call, parse_prepared_function_call},
 };
 use crate::{
-	bail, error::ErrorKind::*, evaluate, evaluate_trivial, function::builtin::BuiltinFunc, Context,
-	Result, Thunk, Val,
+	Context, Result, Thunk, Val, evaluate, evaluate_trivial, function::builtin::BuiltinFunc,
 };
 
 pub mod builtin;
@@ -99,8 +98,6 @@ impl FuncDesc {
 pub enum FuncVal {
 	/// Plain function implemented in jsonnet.
 	Normal(Cc<FuncDesc>),
-	/// Function without arguments works just as a fancy thunk value.
-	Thunk(Thunk<Val>),
 	/// User-provided function.
 	Builtin(BuiltinFunc),
 }
@@ -108,7 +105,6 @@ pub enum FuncVal {
 impl Debug for FuncVal {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::Thunk(arg0) => f.debug_tuple("Thunk").field(arg0).finish(),
 			Self::Normal(arg0) => f.debug_tuple("Normal").field(arg0).finish(),
 			Self::Builtin(arg0) => f.debug_tuple("Builtin").field(&arg0.name()).finish(),
 		}
@@ -130,7 +126,6 @@ impl FuncVal {
 		match self {
 			Self::Builtin(i) => i.params(),
 			Self::Normal(p) => p.params.signature.clone(),
-			Self::Thunk(_) => FunctionSignature::empty(),
 		}
 	}
 	/// Amount of non-default required arguments
@@ -142,7 +137,6 @@ impl FuncVal {
 		match self {
 			Self::Normal(normal) => normal.name.clone(),
 			Self::Builtin(builtin) => builtin.name().into(),
-			Self::Thunk(_) => "thunk".into(),
 		}
 	}
 	/// Call function using arguments evaluated in specified `call_ctx` [`Context`].
@@ -159,12 +153,6 @@ impl FuncVal {
 			Self::Normal(func) => {
 				let body_ctx = func.call_body_context(call_ctx, args, tailstrict)?;
 				evaluate(body_ctx, &func.body)
-			}
-			Self::Thunk(thunk) => {
-				if !args.named.is_empty() || !args.unnamed.is_empty() {
-					bail!(TooManyArgsFunctionHas(0, FunctionSignature::empty()))
-				}
-				thunk.evaluate()
 			}
 			Self::Builtin(b) => {
 				let args = parse_builtin_call(call_ctx, b.params(), args, tailstrict)?;
@@ -192,7 +180,6 @@ impl FuncVal {
 				)?;
 				evaluate(body_ctx, &func.body)
 			}
-			FuncVal::Thunk(t) => t.evaluate(),
 			FuncVal::Builtin(b) => {
 				let args = parse_prepared_builtin_call(prepared, b.params(), unnamed, named);
 				b.call(loc, &args)
@@ -225,14 +212,13 @@ impl FuncVal {
 				};
 				matches!(&*desc.body, Expr::Var(v) if &**v == id)
 			}
-			Self::Thunk(_) => false,
 		}
 	}
 
 	pub fn evaluate_trivial(&self) -> Option<Val> {
 		match self {
 			Self::Normal(n) => n.evaluate_trivial(),
-			_ => None,
+			Self::Builtin(_) => None,
 		}
 	}
 }
