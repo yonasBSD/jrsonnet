@@ -70,12 +70,12 @@ pub fn evaluate_trivial(expr: &Expr) -> Option<Val> {
 			if n.iter().any(|e| !is_trivial(e)) {
 				return None;
 			}
-			Val::Arr(ArrValue::eager(
+			Val::Arr(
 				n.iter()
 					.map(evaluate_trivial)
 					.map(|e| e.expect("checked trivial"))
 					.collect(),
-			))
+			)
 		}
 		_ => return None,
 	})
@@ -145,12 +145,12 @@ pub fn evaluate_comp(
 						let fctx = Pending::new();
 						let mut new_bindings = FxHashMap::with_capacity(into.binds_len());
 						let obj = obj.clone();
-						let value = Thunk::evaluated(Val::Arr(ArrValue::lazy(vec![
+						let value = Thunk::evaluated(Val::arr(vec![
 							Thunk::evaluated(Val::string(field.clone())),
-							Thunk!(move || obj.get(field).transpose().expect(
+							obj.get_lazy(field).transpose().expect(
 								"field exists, as field name was obtained from object.fields()",
-							)),
-						])));
+							),
+						]));
 						destruct(into, value, fctx.clone(), &mut new_bindings)?;
 						let ctx = ctx.clone().extend_bindings(new_bindings).into_future(fctx);
 
@@ -528,7 +528,7 @@ pub fn evaluate(ctx: Context, expr: &Expr) -> Result<Val> {
 						#[cfg(feature = "exp-null-coaelse")]
 						None if part.null_coaelse => return Ok(Val::Null),
 						None => {
-							let suggestions = suggest_object_fields(&v, key.clone().into_flat());
+							let suggestions = suggest_object_fields(&v, key.into_flat());
 
 							return Err(Error::from(NoSuchField(
 								key.clone().into_flat(),
@@ -628,7 +628,7 @@ pub fn evaluate(ctx: Context, expr: &Expr) -> Result<Val> {
 		}
 		Arr(items) => {
 			if items.is_empty() {
-				Val::Arr(ArrValue::empty())
+				Val::arr(())
 			} else {
 				Val::Arr(ArrValue::expr(ctx, items.clone()))
 			}
@@ -640,7 +640,7 @@ pub fn evaluate(ctx: Context, expr: &Expr) -> Result<Val> {
 				out.push(Thunk!(move || evaluate(ctx, &expr)));
 				Ok(())
 			})?;
-			Val::Arr(ArrValue::lazy(out))
+			Val::arr(out)
 		}
 		Obj(body) => Val::Obj(evaluate_object(None, ctx, body)?),
 		ObjExtend(a, b) => {
@@ -718,9 +718,7 @@ pub fn evaluate(ctx: Context, expr: &Expr) -> Result<Val> {
 						|| s.import_resolved(resolved_path),
 					)?,
 					ImportKind::Str => Val::string(s.import_resolved_str(resolved_path)?),
-					ImportKind::Bin => {
-						Val::Arr(ArrValue::bytes(s.import_resolved_bin(resolved_path)?))
-					}
+					ImportKind::Bin => Val::arr(s.import_resolved_bin(resolved_path)?),
 				}) as Result<Val>
 			})?
 		}

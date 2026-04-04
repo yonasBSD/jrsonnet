@@ -113,11 +113,11 @@ pub fn sort(values: ArrValue, key_getter: KeyF) -> Result<ArrValue> {
 		return Ok(values);
 	}
 	if key_getter.is_identity() {
-		Ok(ArrValue::eager(sort_identity(
+		Ok(ArrValue::new(sort_identity(
 			values.iter().collect::<Result<Vec<Val>>>()?,
 		)?))
 	} else {
-		Ok(ArrValue::lazy(sort_keyf(values, key_getter)?))
+		Ok(ArrValue::new(sort_keyf(values, key_getter)?))
 	}
 }
 
@@ -162,11 +162,11 @@ pub fn builtin_uniq(arr: ArrValue, #[default] keyF: KeyF) -> Result<ArrValue> {
 		return Ok(arr);
 	}
 	if keyF.is_identity() {
-		Ok(ArrValue::eager(uniq_identity(
+		Ok(ArrValue::new(uniq_identity(
 			arr.iter().collect::<Result<Vec<Val>>>()?,
 		)?))
 	} else {
-		Ok(ArrValue::lazy(uniq_keyf(arr, keyF)?))
+		Ok(ArrValue::new(uniq_keyf(arr, keyF)?))
 	}
 }
 
@@ -180,11 +180,11 @@ pub fn builtin_set(arr: ArrValue, #[default] keyF: KeyF) -> Result<ArrValue> {
 		let arr = arr.iter().collect::<Result<Vec<Val>>>()?;
 		let arr = sort_identity(arr)?;
 		let arr = uniq_identity(arr)?;
-		Ok(ArrValue::eager(arr))
+		Ok(ArrValue::new(arr))
 	} else {
 		let arr = sort_keyf(arr, keyF.clone())?;
-		let arr = uniq_keyf(ArrValue::lazy(arr), keyF)?;
-		Ok(ArrValue::lazy(arr))
+		let arr = uniq_keyf(ArrValue::new(arr), keyF)?;
+		Ok(ArrValue::new(arr))
 	}
 }
 

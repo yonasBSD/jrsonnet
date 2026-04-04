@@ -29,7 +29,11 @@ pub fn builtin_set_member(x: Thunk<Val>, arr: ArrValue, #[default] keyF: KeyF) -
 
 #[builtin]
 #[allow(non_snake_case, clippy::redundant_closure)]
-pub fn builtin_set_inter(a: ArrValue, b: ArrValue, #[default] keyF: KeyF) -> Result<ArrValue> {
+pub fn builtin_set_inter(
+	a: ArrValue,
+	b: ArrValue,
+	#[default] keyF: KeyF,
+) -> Result<Vec<Thunk<Val>>> {
 	let mut a = a.iter_lazy();
 	let mut b = b.iter_lazy();
 
@@ -60,12 +64,16 @@ pub fn builtin_set_inter(a: ArrValue, b: ArrValue, #[default] keyF: KeyF) -> Res
 			}
 		}
 	}
-	Ok(ArrValue::lazy(out))
+	Ok(out)
 }
 
 #[builtin]
 #[allow(non_snake_case, clippy::redundant_closure)]
-pub fn builtin_set_diff(a: ArrValue, b: ArrValue, #[default] keyF: KeyF) -> Result<ArrValue> {
+pub fn builtin_set_diff(
+	a: ArrValue,
+	b: ArrValue,
+	#[default] keyF: KeyF,
+) -> Result<Vec<Thunk<Val>>> {
 	let mut a = a.iter_lazy();
 	let mut b = b.iter_lazy();
 
@@ -103,12 +111,16 @@ pub fn builtin_set_diff(a: ArrValue, b: ArrValue, #[default] keyF: KeyF) -> Resu
 		av = a.next();
 		ak = av.clone().map(keyF).transpose()?;
 	}
-	Ok(ArrValue::lazy(out))
+	Ok(out)
 }
 
 #[builtin]
 #[allow(non_snake_case, clippy::redundant_closure)]
-pub fn builtin_set_union(a: ArrValue, b: ArrValue, #[default] keyF: KeyF) -> Result<ArrValue> {
+pub fn builtin_set_union(
+	a: ArrValue,
+	b: ArrValue,
+	#[default] keyF: KeyF,
+) -> Result<Vec<Thunk<Val>>> {
 	let mut a = a.iter_lazy();
 	let mut b = b.iter_lazy();
 
@@ -154,5 +166,5 @@ pub fn builtin_set_union(a: ArrValue, b: ArrValue, #[default] keyF: KeyF) -> Res
 		bv = b.next();
 		bk = bv.clone().map(keyF).transpose()?;
 	}
-	Ok(ArrValue::lazy(out))
+	Ok(out)
 }

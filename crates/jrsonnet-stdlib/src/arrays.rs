@@ -34,7 +34,7 @@ pub fn builtin_make_array(
 			for _ in 0..*sz {
 				out.push(trivial.clone());
 			}
-			Ok(ArrValue::eager(out))
+			Ok(ArrValue::new(out))
 		},
 	)
 }
@@ -256,7 +256,7 @@ pub fn builtin_join(sep: IndexableVal, arr: ArrValue) -> Result<IndexableVal> {
 pub fn builtin_lines(arr: ArrValue) -> Result<IndexableVal> {
 	builtin_join(
 		IndexableVal::Str("\n".into()),
-		ArrValue::extended(arr, ArrValue::eager(vec![Val::string("")])),
+		ArrValue::extended(arr, ArrValue::new(vec![Val::string("")])),
 	)
 }
 
@@ -468,7 +468,7 @@ pub fn builtin_prune(
 					out.push(ele);
 				}
 			}
-			Val::Arr(ArrValue::eager(out))
+			Val::arr(out)
 		}
 		Val::Obj(o) => {
 			let mut out = ObjValueBuilder::new();

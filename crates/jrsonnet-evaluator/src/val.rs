@@ -137,7 +137,7 @@ impl<T: Trace> Thunk<T> {
 
 impl<T> Thunk<T>
 where
-	T: Clone + Trace,
+	T: Trace,
 {
 	pub fn force(&self) -> Result<()> {
 		self.evaluate()?;
@@ -161,7 +161,7 @@ pub trait ThunkMapper<Input>: Trace {
 }
 impl<Input> Thunk<Input>
 where
-	Input: Trace + Clone,
+	Input: Trace,
 {
 	pub fn map<M>(self, mapper: M) -> Thunk<M::Output>
 	where
@@ -355,7 +355,7 @@ impl StrValue {
 			Self::Tree(Rc::new((a, b, len)))
 		}
 	}
-	pub fn into_flat(self) -> IStr {
+	pub fn into_flat(&self) -> IStr {
 		#[cold]
 		fn write_buf(s: &StrValue, out: &mut String) {
 			match s {
@@ -367,10 +367,10 @@ impl StrValue {
 			}
 		}
 		match self {
-			Self::Flat(f) => f,
+			Self::Flat(f) => f.clone(),
 			Self::Tree(_) => {
 				let mut buf = String::with_capacity(self.len());
-				write_buf(&self, &mut buf);
+				write_buf(self, &mut buf);
 				buf.into()
 			}
 		}
@@ -700,6 +700,9 @@ impl Val {
 		NumValue: TryFrom<V, Error = E>,
 	{
 		Ok(Self::Num(num.try_into()?))
+	}
+	pub fn arr(a: impl ArrayLike) -> Self {
+		Self::Arr(ArrValue::new(a))
 	}
 }
 

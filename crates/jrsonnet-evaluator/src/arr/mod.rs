@@ -6,7 +6,6 @@ use std::{
 };
 
 use jrsonnet_gcmodule::{Cc, cc_dyn};
-use jrsonnet_interner::IBytes;
 use jrsonnet_ir::Expr;
 
 use crate::{Context, Result, Thunk, Val, function::NativeFn, typed::IntoUntyped};
@@ -35,28 +34,17 @@ impl<I, T> ArrayLikeIter<T> for I where
 
 impl ArrValue {
 	pub fn empty() -> Self {
-		Self::new(RangeArray::empty())
+		Self::new(())
 	}
 
 	pub fn expr(ctx: Context, exprs: Rc<Vec<Expr>>) -> Self {
 		Self::new(ExprArray::new(ctx, exprs))
 	}
 
-	pub fn lazy(thunks: Vec<Thunk<Val>>) -> Self {
-		Self::new(LazyArray(thunks))
-	}
-
-	pub fn eager(values: Vec<Val>) -> Self {
-		Self::new(EagerArray(values))
-	}
-
 	pub fn repeated(data: Self, repeats: usize) -> Option<Self> {
 		Some(Self::new(RepeatedArray::new(data, repeats)?))
 	}
 
-	pub fn bytes(bytes: IBytes) -> Self {
-		Self::new(BytesArray(bytes))
-	}
 	pub fn chars(chars: impl Iterator<Item = char>) -> Self {
 		Self::new(CharArray(chars.collect()))
 	}
@@ -83,7 +71,7 @@ impl ArrValue {
 					out.push(i);
 				}
 			}
-			return Ok(Self::eager(out));
+			return Ok(Self::new(out));
 		};
 
 		let mut out = Vec::new();
@@ -92,29 +80,16 @@ impl ArrValue {
 				out.push(i);
 			}
 		}
-		Ok(Self::lazy(out))
+		Ok(Self::new(out))
 	}
 
 	pub fn extended(a: Self, b: Self) -> Self {
-		// TODO: benchmark for an optimal value, currently just a arbitrary choice
-		const ARR_EXTEND_THRESHOLD: usize = 1000;
-
 		if a.is_empty() {
 			b
 		} else if b.is_empty() {
 			a
-		} else if a.len() + b.len() > ARR_EXTEND_THRESHOLD {
-			Self::new(ExtendedArray::new(a, b))
-		} else if let (Some(a), Some(b)) = (a.iter_cheap(), b.iter_cheap()) {
-			let mut out = Vec::with_capacity(a.len() + b.len());
-			out.extend(a);
-			out.extend(b);
-			Self::eager(out)
 		} else {
-			let mut out = Vec::with_capacity(a.len() + b.len());
-			out.extend(a.iter_lazy());
-			out.extend(b.iter_lazy());
-			Self::lazy(out)
+			Self::new(ExtendedArray::new(a, b))
 		}
 	}
 
@@ -165,19 +140,15 @@ impl ArrValue {
 		self.0.is_empty()
 	}
 
+	pub fn is_cheap(&self) -> bool {
+		self.0.is_cheap()
+	}
+
 	/// Get array element by index, evaluating it, if it is lazy.
 	///
 	/// Returns `None` on out-of-bounds condition.
 	pub fn get(&self, index: usize) -> Result<Option<Val>> {
 		self.0.get(index)
-	}
-
-	/// Returns None if get is either non cheap, or out of bounds
-	/// Note that non-cheap access includes errorable values
-	///
-	/// Prefer it to `get_lazy`, but use `get` when you can.
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		self.0.get_cheap(index)
 	}
 
 	/// Get array element by index, without evaluation.
@@ -196,15 +167,6 @@ impl ArrValue {
 		(0..self.len()).map(|i| self.get_lazy(i).expect("length checked"))
 	}
 
-	/// Prefer it over `iter_lazy`, but do not use it where `iter` will do.
-	pub fn iter_cheap(&self) -> Option<impl ArrayLikeIter<Val> + '_> {
-		if self.is_cheap() {
-			Some((0..self.len()).map(|i| self.get_cheap(i).expect("length and is_cheap checked")))
-		} else {
-			None
-		}
-	}
-
 	/// Return a reversed view on current array.
 	#[must_use]
 	pub fn reversed(self) -> Self {
@@ -215,48 +177,23 @@ impl ArrValue {
 		Cc::ptr_eq(&a.0, &b.0)
 	}
 
-	/// Is this vec supports `.get_cheap()?`
-	pub fn is_cheap(&self) -> bool {
-		self.0.is_cheap()
-	}
-
 	pub fn as_any(&self) -> &dyn Any {
 		&self.0
 	}
 }
-impl From<Vec<Val>> for ArrValue {
-	fn from(value: Vec<Val>) -> Self {
-		Self::eager(value)
+impl<T> From<T> for ArrValue
+where
+	T: ArrayLike,
+{
+	fn from(value: T) -> Self {
+		Self::new(value)
 	}
 }
-impl From<Vec<Thunk<Val>>> for ArrValue {
-	fn from(value: Vec<Thunk<Val>>) -> Self {
-		Self::lazy(value)
-	}
-}
-impl FromIterator<Val> for ArrValue {
-	fn from_iter<T: IntoIterator<Item = Val>>(iter: T) -> Self {
-		Self::eager(iter.into_iter().collect())
-	}
-}
-impl ArrayLike for ArrValue {
-	fn len(&self) -> usize {
-		self.0.len()
-	}
-
-	fn get(&self, index: usize) -> Result<Option<Val>> {
-		self.0.get(index)
-	}
-
-	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		self.0.get_lazy(index)
-	}
-
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		self.0.get_cheap(index)
-	}
-
-	fn is_cheap(&self) -> bool {
-		self.0.is_cheap()
+impl<I> FromIterator<I> for ArrValue
+where
+	Vec<I>: ArrayLike,
+{
+	fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
+		Self::new(iter.into_iter().collect::<Vec<_>>())
 	}
 }

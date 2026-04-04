@@ -1,4 +1,10 @@
-use std::{any::Any, cell::RefCell, fmt::Debug, mem::replace, rc::Rc};
+use std::{
+	any::Any,
+	cell::RefCell,
+	fmt::{self, Debug},
+	mem::replace,
+	rc::Rc,
+};
 
 use jrsonnet_gcmodule::{Cc, Trace};
 use jrsonnet_interner::{IBytes, IStr};
@@ -21,9 +27,43 @@ pub trait ArrayLike: Any + Trace + Debug {
 	}
 	fn get(&self, index: usize) -> Result<Option<Val>>;
 	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>>;
-	fn get_cheap(&self, index: usize) -> Option<Val>;
 
-	fn is_cheap(&self) -> bool;
+	fn is_cheap(&self) -> bool {
+		false
+	}
+}
+trait ArrayCheap {
+	fn get(&self, index: usize) -> Option<Val>;
+	fn len(&self) -> usize;
+}
+impl<T> ArrayLike for T
+where
+	T: Any + Trace + Debug + ArrayCheap,
+{
+	fn len(&self) -> usize {
+		<T as ArrayCheap>::len(self)
+	}
+
+	fn get(&self, index: usize) -> Result<Option<Val>> {
+		Ok(<T as ArrayCheap>::get(self, index))
+	}
+
+	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
+		<T as ArrayCheap>::get(self, index).map(Thunk::evaluated)
+	}
+
+	fn is_cheap(&self) -> bool {
+		true
+	}
+}
+
+impl ArrayCheap for () {
+	fn len(&self) -> usize {
+		0
+	}
+	fn get(&self, _index: usize) -> Option<Val> {
+		None
+	}
 }
 
 #[derive(Debug, Trace)]
@@ -52,9 +92,6 @@ impl ArrayLike for SliceArray {
 		self.inner.get_lazy(self.map_idx(index))
 	}
 
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		self.inner.get_cheap(self.map_idx(index))
-	}
 	fn is_cheap(&self) -> bool {
 		self.inner.is_cheap()
 	}
@@ -62,47 +99,21 @@ impl ArrayLike for SliceArray {
 
 #[derive(Trace, Debug)]
 pub struct CharArray(pub Vec<char>);
-impl ArrayLike for CharArray {
+impl ArrayCheap for CharArray {
 	fn len(&self) -> usize {
-		self.0.len()
+		self.0.as_slice().len()
 	}
-
-	fn get(&self, index: usize) -> Result<Option<Val>> {
-		Ok(self.get_cheap(index))
-	}
-
-	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		self.get_cheap(index).map(Thunk::evaluated)
-	}
-
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		self.0.get(index).map(|v| Val::string(*v))
-	}
-	fn is_cheap(&self) -> bool {
-		true
+	fn get(&self, index: usize) -> Option<Val> {
+		self.0.as_slice().get(index).map(|v| Val::string(*v))
 	}
 }
 
-#[derive(Trace, Debug)]
-pub struct BytesArray(pub IBytes);
-impl ArrayLike for BytesArray {
+impl ArrayCheap for IBytes {
 	fn len(&self) -> usize {
-		self.0.len()
+		self.as_slice().len()
 	}
-
-	fn get(&self, index: usize) -> Result<Option<Val>> {
-		Ok(self.get_cheap(index))
-	}
-
-	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		self.get_cheap(index).map(Thunk::evaluated)
-	}
-
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		self.0.get(index).map(|v| Val::Num((*v).into()))
-	}
-	fn is_cheap(&self) -> bool {
-		true
+	fn get(&self, index: usize) -> Option<Val> {
+		self.as_slice().get(index).map(|v| Val::Num((*v).into()))
 	}
 }
 
@@ -191,9 +202,6 @@ impl ArrayLike for ExprArray {
 			index,
 		}))
 	}
-	fn get_cheap(&self, _index: usize) -> Option<Val> {
-		None
-	}
 	fn is_cheap(&self) -> bool {
 		false
 	}
@@ -275,61 +283,34 @@ impl ArrayLike for ExtendedArray {
 		self.len
 	}
 
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		if self.split > index {
-			self.a.get_cheap(index)
-		} else {
-			self.b.get_cheap(index - self.split)
-		}
-	}
 	fn is_cheap(&self) -> bool {
 		self.a.is_cheap() && self.b.is_cheap()
 	}
 }
 
-#[derive(Trace, Debug)]
-pub struct LazyArray(pub Vec<Thunk<Val>>);
-impl ArrayLike for LazyArray {
+impl<T> ArrayLike for Vec<T>
+where
+	T: IntoUntyped + Trace + fmt::Debug,
+	for<'a> &'a T: IntoUntyped,
+{
 	fn len(&self) -> usize {
-		self.0.len()
+		self.as_slice().len()
 	}
+
 	fn get(&self, index: usize) -> Result<Option<Val>> {
-		let Some(v) = self.0.get(index) else {
+		let Some(elem) = self.as_slice().get(index) else {
 			return Ok(None);
 		};
-		v.evaluate().map(Some)
-	}
-	fn get_cheap(&self, _index: usize) -> Option<Val> {
-		None
-	}
-	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		self.0.get(index).cloned()
-	}
-	fn is_cheap(&self) -> bool {
-		false
-	}
-}
-
-#[derive(Trace, Debug)]
-pub struct EagerArray(pub Vec<Val>);
-impl ArrayLike for EagerArray {
-	fn len(&self) -> usize {
-		self.0.len()
-	}
-
-	fn get(&self, index: usize) -> Result<Option<Val>> {
-		Ok(self.0.get(index).cloned())
+		IntoUntyped::into_untyped(elem).map(Some)
 	}
 
 	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		self.0.get(index).cloned().map(Thunk::evaluated)
+		let elem = self.as_slice().get(index)?;
+		Some(IntoUntyped::into_lazy_untyped(elem))
 	}
 
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		self.0.get(index).cloned()
-	}
 	fn is_cheap(&self) -> bool {
-		true
+		!T::provides_lazy()
 	}
 }
 
@@ -363,28 +344,12 @@ impl RangeArray {
 		WithExactSize(self.start..=self.end, self.size())
 	}
 }
-
-impl ArrayLike for RangeArray {
-	fn len(&self) -> usize {
-		self.size()
-	}
-	fn is_empty(&self) -> bool {
-		self.size() == 0
-	}
-
-	fn get(&self, index: usize) -> Result<Option<Val>> {
-		Ok(self.get_cheap(index))
-	}
-
-	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		self.get_cheap(index).map(Thunk::evaluated)
-	}
-
-	fn get_cheap(&self, index: usize) -> Option<Val> {
+impl ArrayCheap for RangeArray {
+	fn get(&self, index: usize) -> Option<Val> {
 		self.range().nth(index).map(|i| Val::Num(i.into()))
 	}
-	fn is_cheap(&self) -> bool {
-		true
+	fn len(&self) -> usize {
+		self.size()
 	}
 }
 
@@ -403,9 +368,6 @@ impl ArrayLike for ReverseArray {
 		self.0.get_lazy(self.0.len() - index - 1)
 	}
 
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		self.0.get_cheap(self.0.len() - index - 1)
-	}
 	fn is_cheap(&self) -> bool {
 		self.0.is_cheap()
 	}
@@ -510,13 +472,6 @@ impl ArrayLike for MappedArray {
 			index,
 		}))
 	}
-
-	fn get_cheap(&self, _index: usize) -> Option<Val> {
-		None
-	}
-	fn is_cheap(&self) -> bool {
-		false
-	}
 }
 
 #[derive(Trace, Debug)]
@@ -534,6 +489,12 @@ impl RepeatedArray {
 			total_len,
 		})
 	}
+	fn map_idx(&self, index: usize) -> Option<usize> {
+		if index > self.total_len {
+			return None;
+		}
+		Some(index % self.data.len())
+	}
 }
 
 impl ArrayLike for RepeatedArray {
@@ -542,25 +503,17 @@ impl ArrayLike for RepeatedArray {
 	}
 
 	fn get(&self, index: usize) -> Result<Option<Val>> {
-		if index > self.total_len {
+		let Some(idx) = self.map_idx(index) else {
 			return Ok(None);
-		}
-		self.data.get(index % self.data.len())
+		};
+		self.data.get(idx)
 	}
 
 	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		if index > self.total_len {
-			return None;
-		}
-		self.data.get_lazy(index % self.data.len())
+		let idx = self.map_idx(index)?;
+		self.data.get_lazy(idx)
 	}
 
-	fn get_cheap(&self, index: usize) -> Option<Val> {
-		if index > self.total_len {
-			return None;
-		}
-		self.data.get_cheap(index % self.data.len())
-	}
 	fn is_cheap(&self) -> bool {
 		self.data.is_cheap()
 	}
@@ -584,19 +537,15 @@ impl ArrayLike for PickObjectValues {
 	}
 
 	fn get(&self, index: usize) -> Result<Option<Val>> {
-		let Some(key) = self.keys.get(index) else {
+		let Some(key) = self.keys.as_slice().get(index) else {
 			return Ok(None);
 		};
 		Ok(Some(self.obj.get_or_bail(key.clone())?))
 	}
 
 	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		let key = self.keys.get(index)?;
+		let key = self.keys.as_slice().get(index)?;
 		Some(self.obj.get_lazy_or_bail(key.clone()))
-	}
-
-	fn get_cheap(&self, _index: usize) -> Option<Val> {
-		None
 	}
 
 	fn is_cheap(&self) -> bool {
@@ -628,7 +577,7 @@ impl ArrayLike for PickObjectKeyValues {
 	}
 
 	fn get(&self, index: usize) -> Result<Option<Val>> {
-		let Some(key) = self.keys.get(index) else {
+		let Some(key) = self.keys.as_slice().get(index) else {
 			return Ok(None);
 		};
 		Ok(Some(
@@ -641,7 +590,7 @@ impl ArrayLike for PickObjectKeyValues {
 	}
 
 	fn get_lazy(&self, index: usize) -> Option<Thunk<Val>> {
-		let key = self.keys.get(index)?;
+		let key = self.keys.as_slice().get(index)?;
 		// Nothing can fail in the key part, yet value is still
 		// lazy-evaluated
 		Some(Thunk::evaluated(
@@ -651,10 +600,6 @@ impl ArrayLike for PickObjectKeyValues {
 			})
 			.expect("convertible"),
 		))
-	}
-
-	fn get_cheap(&self, _index: usize) -> Option<Val> {
-		None
 	}
 
 	fn is_cheap(&self) -> bool {
