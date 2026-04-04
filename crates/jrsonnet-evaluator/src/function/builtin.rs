@@ -57,14 +57,6 @@ pub trait Builtin: Trace {
 	fn as_any(&self) -> &dyn Any;
 }
 
-pub trait StaticBuiltin: Builtin + Send + Sync
-where
-	Self: 'static,
-{
-	// In impl, to make it object safe:
-	// const INST: &'static Self;
-}
-
 #[derive(Trace)]
 pub struct NativeCallback {
 	pub(crate) params: FunctionSignature,

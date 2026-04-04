@@ -7,13 +7,13 @@ use jrsonnet_ir::{ArgsDesc, Destruct, Expr, ExprParams, Span};
 pub use jrsonnet_macros::builtin;
 
 use self::{
-	builtin::{Builtin, StaticBuiltin},
+	builtin::Builtin,
 	parse::{parse_builtin_call, parse_default_function_call, parse_function_call},
-	prepared::{PreparedCall, parse_prepared_builtin_call, parse_prepared_function_call},
+	prepared::{parse_prepared_builtin_call, parse_prepared_function_call, PreparedCall},
 };
 use crate::{
-	Context, Result, Thunk, Val, bail, error::ErrorKind::*, evaluate, evaluate_trivial,
-	function::builtin::BuiltinFunc,
+	bail, error::ErrorKind::*, evaluate, evaluate_trivial, function::builtin::BuiltinFunc, Context,
+	Result, Thunk, Val,
 };
 
 pub mod builtin;
@@ -97,14 +97,10 @@ impl FuncDesc {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Trace, Clone)]
 pub enum FuncVal {
-	/// Identity function, kept this way for comparsions.
-	Id,
 	/// Plain function implemented in jsonnet.
 	Normal(Cc<FuncDesc>),
 	/// Function without arguments works just as a fancy thunk value.
 	Thunk(Thunk<Val>),
-	/// Standard library function.
-	StaticBuiltin(#[trace(skip)] &'static dyn StaticBuiltin),
 	/// User-provided function.
 	Builtin(BuiltinFunc),
 }
@@ -112,12 +108,8 @@ pub enum FuncVal {
 impl Debug for FuncVal {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::Id => f.debug_tuple("Id").finish(),
 			Self::Thunk(arg0) => f.debug_tuple("Thunk").field(arg0).finish(),
 			Self::Normal(arg0) => f.debug_tuple("Normal").field(arg0).finish(),
-			Self::StaticBuiltin(arg0) => {
-				f.debug_tuple("StaticBuiltin").field(&arg0.name()).finish()
-			}
 			Self::Builtin(arg0) => f.debug_tuple("Builtin").field(&arg0.name()).finish(),
 		}
 	}
@@ -125,23 +117,17 @@ impl Debug for FuncVal {
 
 #[allow(clippy::unnecessary_wraps)]
 #[builtin]
-const fn builtin_id(x: Val) -> Val {
+pub const fn builtin_id(x: Thunk<Val>) -> Thunk<Val> {
 	x
 }
-static ID: &builtin_id = &builtin_id {};
 
 impl FuncVal {
 	pub fn builtin(builtin: impl Builtin) -> Self {
 		Self::Builtin(BuiltinFunc::new(builtin))
 	}
-	pub fn static_builtin(static_builtin: &'static dyn StaticBuiltin) -> Self {
-		Self::StaticBuiltin(static_builtin)
-	}
 
 	pub fn params(&self) -> FunctionSignature {
 		match self {
-			Self::Id => ID.params(),
-			Self::StaticBuiltin(i) => i.params(),
 			Self::Builtin(i) => i.params(),
 			Self::Normal(p) => p.params.signature.clone(),
 			Self::Thunk(_) => FunctionSignature::empty(),
@@ -154,9 +140,7 @@ impl FuncVal {
 	/// Function name, as defined in code.
 	pub fn name(&self) -> IStr {
 		match self {
-			Self::Id => "id".into(),
 			Self::Normal(normal) => normal.name.clone(),
-			Self::StaticBuiltin(builtin) => builtin.name().into(),
 			Self::Builtin(builtin) => builtin.name().into(),
 			Self::Thunk(_) => "thunk".into(),
 		}
@@ -181,14 +165,6 @@ impl FuncVal {
 					bail!(TooManyArgsFunctionHas(0, FunctionSignature::empty()))
 				}
 				thunk.evaluate()
-			}
-			Self::Id => {
-				let args = parse_builtin_call(call_ctx, ID.params(), args, tailstrict)?;
-				ID.call(loc, &args)
-			}
-			Self::StaticBuiltin(b) => {
-				let args = parse_builtin_call(call_ctx, b.params(), args, tailstrict)?;
-				b.call(loc, &args)
 			}
 			Self::Builtin(b) => {
 				let args = parse_builtin_call(call_ctx, b.params(), args, tailstrict)?;
@@ -217,14 +193,6 @@ impl FuncVal {
 				evaluate(body_ctx, &func.body)
 			}
 			FuncVal::Thunk(t) => t.evaluate(),
-			FuncVal::Id => {
-				let args = parse_prepared_builtin_call(prepared, ID.params(), unnamed, named);
-				ID.call(loc, &args)
-			}
-			FuncVal::StaticBuiltin(b) => {
-				let args = parse_prepared_builtin_call(prepared, b.params(), unnamed, named);
-				b.call(loc, &args)
-			}
 			FuncVal::Builtin(b) => {
 				let args = parse_prepared_builtin_call(prepared, b.params(), unnamed, named);
 				b.call(loc, &args)
@@ -239,7 +207,7 @@ impl FuncVal {
 	/// This function should only be used for optimization, not for the conditional logic, i.e code should work with syntetic identity function too
 	pub fn is_identity(&self) -> bool {
 		match self {
-			Self::Id => true,
+			Self::Builtin(b) => b.as_any().downcast_ref::<builtin_id>().is_some(),
 			Self::Normal(desc) => {
 				if desc.params.len() != 1 {
 					return false;
@@ -257,12 +225,8 @@ impl FuncVal {
 				};
 				matches!(&*desc.body, Expr::Var(v) if &**v == id)
 			}
-			_ => false,
+			Self::Thunk(_) => false,
 		}
-	}
-	/// Identity function value.
-	pub const fn identity() -> Self {
-		Self::Id
 	}
 
 	pub fn evaluate_trivial(&self) -> Option<Val> {
@@ -279,10 +243,5 @@ where
 {
 	fn from(value: T) -> Self {
 		Self::builtin(value)
-	}
-}
-impl From<&'static dyn StaticBuiltin> for FuncVal {
-	fn from(value: &'static dyn StaticBuiltin) -> Self {
-		Self::static_builtin(value)
 	}
 }
