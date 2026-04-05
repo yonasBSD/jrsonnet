@@ -1,6 +1,6 @@
 use std::{
 	fmt::{self, Debug, Display},
-	ops::Deref,
+	ops::{Deref, RangeInclusive},
 	rc::Rc,
 };
 
@@ -465,6 +465,15 @@ impl Span {
 	pub fn belongs_to(&self, other: &Span) -> bool {
 		other.0 == self.0 && other.1 <= self.1 && other.2 >= self.2
 	}
+	pub fn range(&self) -> RangeInclusive<usize> {
+		let start = self.1;
+		let mut end = self.2;
+		if end > start {
+			// Because it is originally exclusive
+			end -= 1;
+		}
+		start as usize..=end as usize
+	}
 }
 
 #[cfg(target_pointer_width = "64")]
@@ -491,6 +500,21 @@ impl<T: Acyclic> Spanned<T> {
 	#[inline]
 	pub fn new(value: T, span: Span) -> Self {
 		Self { value, span }
+	}
+	pub fn map<U: Acyclic>(self, v: impl FnOnce(T) -> U) -> Spanned<U> {
+		Spanned {
+			span: self.span,
+			value: v(self.value),
+		}
+	}
+	pub fn as_ref<'a>(&'a self) -> Spanned<&'a T>
+	where
+		&'a T: Acyclic,
+	{
+		Spanned {
+			span: self.span.clone(),
+			value: &self.value,
+		}
 	}
 }
 
