@@ -51,7 +51,7 @@ pub fn prepare_call(
 		bail!(TooManyArgsFunctionHas(params.len(), params))
 	}
 
-	let expected_defaults = params.len() - unnamed - named.len();
+	let expected_defaults = (params.len() - unnamed).saturating_sub(named.len());
 	let mut ops = PreparedCall {
 		named: Vec::with_capacity(named.len()),
 		defaults: Vec::with_capacity(expected_defaults),

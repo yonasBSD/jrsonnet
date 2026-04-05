@@ -431,7 +431,6 @@ pub fn evaluate_apply(
 	Ok(match value {
 		Val::Func(f) => {
 			let name = f.name();
-			let prepare = PreparedFuncVal::new(f, args.unnamed.len(), &args.names)?;
 			let unnamed = args
 				.unnamed
 				.iter()
@@ -444,6 +443,8 @@ pub fn evaluate_apply(
 				.cloned()
 				.map(|un| evaluate_thunk(ctx.clone(), un, tailstrict))
 				.collect::<Result<Vec<_>>>()?;
+			let prepare = PreparedFuncVal::new(f, args.unnamed.len(), &args.names)
+				.with_description_src(loc, || format!("function <{name}> call"))?;
 			let body = || prepare.call(loc, &unnamed, &named);
 			if tailstrict {
 				body()?
