@@ -5,10 +5,7 @@ use std::{
 	os::raw::{c_char, c_double, c_int},
 };
 
-use jrsonnet_evaluator::{
-	ObjValue, Val,
-	val::{ArrValue, NumValue},
-};
+use jrsonnet_evaluator::{NumValue, ObjValue, Val};
 
 use crate::VM;
 

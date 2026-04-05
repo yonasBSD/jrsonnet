@@ -2,6 +2,8 @@ use std::{any::TypeId, collections::BTreeMap, marker::PhantomData, mem::transmut
 
 use jrsonnet_gcmodule::Trace;
 use jrsonnet_interner::{IBytes, IStr};
+use jrsonnet_ir::NumValue;
+pub use jrsonnet_ir::{MAX_SAFE_INTEGER, MIN_SAFE_INTEGER};
 use jrsonnet_types::{ComplexValType, ValType};
 
 use crate::{
@@ -10,7 +12,7 @@ use crate::{
 	bail,
 	function::FuncVal,
 	typed::CheckType,
-	val::{IndexableVal, NumValue, StrValue, ThunkMapper},
+	val::{IndexableVal, StrValue, ThunkMapper},
 };
 
 #[doc(hidden)]
@@ -219,11 +221,6 @@ where
 		Ok(inner.map(<ThunkFromUntyped<T>>::default()))
 	}
 }
-
-#[expect(clippy::cast_precision_loss, reason = "checked to not overflow")]
-pub const MAX_SAFE_INTEGER: f64 = ((1u64 << (f64::MANTISSA_DIGITS)) - 1) as f64;
-#[expect(clippy::cast_precision_loss, reason = "checked to not overflow")]
-pub const MIN_SAFE_INTEGER: f64 = (-((1i64 << (f64::MANTISSA_DIGITS)) - 1)) as f64;
 
 macro_rules! impl_int {
 	($($ty:ty)*) => {$(

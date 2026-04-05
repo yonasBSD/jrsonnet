@@ -12,13 +12,12 @@ pub use compat::*;
 pub use encoding::*;
 pub use hash::*;
 use jrsonnet_evaluator::{
-	ContextBuilder, IStr, ObjValue, ObjValueBuilder, Thunk, Val,
+	ContextBuilder, IStr, NumValue, ObjValue, ObjValueBuilder, Thunk, Val,
 	error::Result,
 	function::{CallLocation, FuncVal, builtin_id},
 	tla::TlaArg,
 	trace::PathResolver,
 	typed::SerializeTypedObj as _,
-	val::NumValue,
 };
 use jrsonnet_gcmodule::{Acyclic, Cc, Trace};
 use jrsonnet_ir::Source;

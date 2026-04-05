@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use jrsonnet_interner::{IBytes, IStr};
+use jrsonnet_ir::NumValue;
 use serde::{
 	Deserialize, Serialize, Serializer,
 	de::{self, Visitor},
@@ -12,7 +13,6 @@ use serde::{
 
 use crate::{
 	Error as JrError, ObjValue, ObjValueBuilder, Result, Val, in_description_frame, runtime_error,
-	val::NumValue,
 };
 
 impl<'de> Deserialize<'de> for Val {

@@ -4,8 +4,8 @@ use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_ir::{
 	ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BinaryOpType, BindSpec, CompSpec, Destruct, Expr,
 	ExprParam, ExprParams, FieldMember, FieldName, ForSpecData, IStr, IfElse, IfSpecData,
-	ImportKind, IndexPart, LiteralType, Member, ObjBody, ObjComp, ObjMembers, Slice, SliceDesc,
-	Source, Span, Spanned, UnaryOpType, Visibility, unescape,
+	ImportKind, IndexPart, LiteralType, Member, NumValue, ObjBody, ObjComp, ObjMembers, Slice,
+	SliceDesc, Source, Span, Spanned, UnaryOpType, Visibility, unescape,
 };
 use jrsonnet_lexer::{Lexeme, Lexer, Span as LexSpan, SyntaxKind, T, collect_lexed_str_block};
 
@@ -202,17 +202,21 @@ fn is_string_token(kind: SyntaxKind) -> bool {
 	)
 }
 
-fn parse_number(p: &mut Parser<'_>) -> Result<f64> {
+fn parse_number(p: &mut Parser<'_>) -> Result<NumValue> {
 	let text = p.text();
 	let n: f64 = text
 		.replace('_', "")
 		.parse()
 		.map_err(|_| p.error(format!("invalid number literal: {text}")))?;
-	if !n.is_finite() {
-		return Err(p.error("numbers are finite".into()));
-	}
+
+	let v = match NumValue::try_from(n) {
+		Ok(v) => v,
+		Err(e) => return Err(p.error(format!("invalid number value: {e}"))),
+	};
+
 	p.eat_any();
-	Ok(n)
+
+	Ok(v)
 }
 
 fn ident(p: &mut Parser<'_>) -> Result<IStr> {

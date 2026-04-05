@@ -21,7 +21,7 @@ use crate::{
 	function::{CallLocation, FuncDesc, FuncVal, PreparedFuncVal},
 	in_frame,
 	typed::{FromUntyped, IntoUntyped as _, Typed},
-	val::{CachedUnbound, IndexableVal, NumValue, StrValue, Thunk},
+	val::{CachedUnbound, IndexableVal, StrValue, Thunk},
 	with_state,
 };
 pub mod destructure;
@@ -58,9 +58,7 @@ pub fn evaluate_trivial(expr: &Expr) -> Option<Val> {
 	}
 	Some(match expr {
 		Expr::Str(s) => Val::string(s.clone()),
-		Expr::Num(n) => {
-			Val::Num(NumValue::new(*n).expect("parser will not allow non-finite values"))
-		}
+		Expr::Num(n) => Val::Num(*n),
 		Expr::Literal(LiteralType::False) => Val::Bool(false),
 		Expr::Literal(LiteralType::True) => Val::Bool(true),
 		Expr::Literal(LiteralType::Null) => Val::Null,

@@ -4,8 +4,8 @@ use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_ir::{
 	ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BindSpec, CompSpec, Destruct, DestructRest, Expr,
 	ExprParam, ExprParams, FieldMember, FieldName, ForSpecData, IStr, IfElse, IfSpecData,
-	ImportKind, IndexPart, LiteralType, Member, ObjBody, ObjComp, ObjMembers, Slice, SliceDesc,
-	Source, Span, Spanned, Visibility, unescape,
+	ImportKind, IndexPart, LiteralType, Member, NumValue, ObjBody, ObjComp, ObjMembers, Slice,
+	SliceDesc, Source, Span, Spanned, Visibility, unescape,
 };
 use peg::parser;
 
@@ -52,7 +52,7 @@ parser! {
 		/// Sequence of digits
 		rule uint_str() -> &'input str = a:$(digit()+ ("_" digit()+)*) { a }
 		/// Number in scientific notation format
-		rule number() -> f64 = quiet!{a:$(uint_str() ("." uint_str())? (['e'|'E'] (s:['+'|'-'])? uint_str())?) {? a.replace("_","").parse().map_err(|_| "<number>") }} / expected!("<number>")
+		rule number() -> f64 = quiet!{a:$(uint_str() ("." uint_str())? (['e'|'E'] (s:['+'|'-'])? uint_str())?) {? a.replace('_',"").parse().map_err(|_| "<number>") }} / expected!("<number>")
 
 		/// Reserved word followed by any non-alphanumberic
 		rule reserved() = ("assert" / "else" / "error" / "false" / "for" / "function" / "if" / "import" / "importstr" / "importbin" / "in" / "local" / "null" / "tailstrict" / "then" / "self" / "super" / "true") end_of_ident()
@@ -267,7 +267,7 @@ parser! {
 				Expr::ArrComp(Rc::new(expr), specs)
 			}
 		pub rule number_expr(s: &ParserSettings) -> Expr
-			= n:number() {? if n.is_finite() {
+			= n:number() {? if let Some(n) = NumValue::new(n) {
 				Ok(Expr::Num(n))
 			} else {
 				Err("!!!numbers are finite")

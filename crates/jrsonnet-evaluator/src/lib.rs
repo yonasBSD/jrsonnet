@@ -42,6 +42,7 @@ pub use import::*;
 use jrsonnet_gcmodule::{Cc, Trace, cc_dyn};
 pub use jrsonnet_interner::{IBytes, IStr};
 pub use jrsonnet_ir as parser;
+pub use jrsonnet_ir::NumValue;
 use jrsonnet_ir::{Expr, Source, SourcePath};
 #[doc(hidden)]
 pub use jrsonnet_macros;

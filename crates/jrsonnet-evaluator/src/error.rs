@@ -2,7 +2,9 @@ use std::{cmp::Ordering, convert::Infallible, fmt};
 
 use jrsonnet_gcmodule::{Acyclic, Trace};
 use jrsonnet_interner::IStr;
-use jrsonnet_ir::{BinaryOpType, Source, SourcePath, Span, Spanned, UnaryOpType};
+use jrsonnet_ir::{
+	BinaryOpType, ConvertNumValueError, Source, SourcePath, Span, Spanned, UnaryOpType,
+};
 use jrsonnet_types::ValType;
 use thiserror::Error;
 
@@ -11,7 +13,6 @@ use crate::{
 	function::{CallLocation, FunctionSignature, ParamName},
 	stdlib::format::FormatError,
 	typed::TypeLocError,
-	val::ConvertNumValueError,
 };
 
 #[derive(Debug, Clone)]
@@ -226,6 +227,11 @@ impl From<anyhow::Error> for Error {
 impl From<ErrorKind> for Error {
 	fn from(e: ErrorKind) -> Self {
 		Self::new(e)
+	}
+}
+impl From<ConvertNumValueError> for Error {
+	fn from(e: ConvertNumValueError) -> Self {
+		Self::new(ErrorKind::ConvertNumValue(e))
 	}
 }
 

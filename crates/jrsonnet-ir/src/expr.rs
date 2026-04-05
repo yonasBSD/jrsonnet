@@ -8,6 +8,7 @@ use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_interner::IStr;
 
 use crate::{
+	NumValue,
 	function::{FunctionSignature, ParamDefault, ParamName, ParamParse},
 	source::Source,
 };
@@ -398,7 +399,7 @@ pub enum Expr {
 	/// String value: "hello"
 	Str(IStr),
 	/// Number: 1, 2.0, 2e+20
-	Num(f64),
+	Num(NumValue),
 	/// Variable name: test
 	Var(Spanned<IStr>),
 
