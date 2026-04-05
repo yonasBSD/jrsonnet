@@ -145,28 +145,36 @@ pub fn evaluate_comp(
 						)?;
 					}
 				}
-				#[cfg(feature = "exp-object-iteration")]
-				Val::Obj(obj) => {
+				Val::Obj(obj) if cfg!(feature = "exp-object-iteration") => {
 					let fields = obj.fields(
 						// TODO: Should there be ability to preserve iteration order?
 						#[cfg(feature = "exp-preserve-order")]
 						false,
 					);
 					guaranteed_reserve = guaranteed_reserve.max(1) * fields.len();
-					for field in fields {
+					for (i, field) in fields.into_iter().enumerate() {
 						let fctx = Pending::new();
-						let mut new_bindings = FxHashMap::with_capacity(into.binds_len());
+						let mut ctx = ContextBuilder::extend_fast(ctx.clone());
 						let obj = obj.clone();
 						let value = Thunk::evaluated(Val::arr(vec![
 							Thunk::evaluated(Val::string(field.clone())),
-							obj.get_lazy(field).transpose().expect(
+							obj.get_lazy(field).expect(
 								"field exists, as field name was obtained from object.fields()",
 							),
 						]));
-						destruct(into, value, fctx.clone(), &mut new_bindings)?;
-						let ctx = ctx.clone().extend_bindings(new_bindings).into_future(fctx);
+						destruct(into, value, fctx.clone(), &mut ctx)?;
+						let ctx = ctx.build().into_future(fctx);
 
-						evaluate_comp(ctx, &specs[1..], callback)?;
+						evaluate_comp(
+							ctx,
+							&specs[1..],
+							if i == 0 || !specs.is_empty() {
+								guaranteed_reserve
+							} else {
+								0
+							},
+							callback,
+						)?;
 					}
 				}
 				_ => bail!(InComprehensionCanOnlyIterateOverArray),

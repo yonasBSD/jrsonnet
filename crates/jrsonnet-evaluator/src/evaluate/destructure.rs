@@ -1,7 +1,5 @@
 use jrsonnet_ir::{BindSpec, Destruct};
 
-#[cfg(feature = "exp-preserve-order")]
-use crate::evaluate;
 use crate::{
 	Context, ContextBuilder, Pending, Thunk, Val, error::Result, evaluate_method,
 	evaluate_named_param,
@@ -24,6 +22,8 @@ pub fn destruct(
 		#[cfg(feature = "exp-destruct")]
 		Destruct::Array { start, rest, end } => {
 			use jrsonnet_ir::DestructRest;
+
+			use crate::bail;
 
 			let min_len = start.len() + end.len();
 			let has_rest = rest.is_some();
@@ -102,7 +102,7 @@ pub fn destruct(
 			use jrsonnet_ir::DestructRest;
 			use rustc_hash::FxHashSet;
 
-			use crate::ObjValueBuilder;
+			use crate::{ObjValueBuilder, bail};
 
 			let captured_fields: FxHashSet<_> = fields.iter().map(|f| f.0.clone()).collect();
 			let field_names: Vec<_> = fields
