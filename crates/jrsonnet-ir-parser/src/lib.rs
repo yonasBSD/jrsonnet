@@ -125,6 +125,13 @@ impl<'a> Parser<'a> {
 	}
 
 	fn error(&self, message: String) -> ParseError {
+		if self.offset == self.lexemes.len() {
+			let pos = self.lexemes.last().map_or(0, |v| v.range.1);
+			return ParseError {
+				location: LexSpan(pos, pos),
+				message,
+			};
+		}
 		ParseError {
 			location: self.lexemes[self.offset].range,
 			message,
