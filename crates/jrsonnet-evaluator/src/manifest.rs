@@ -1,6 +1,9 @@
 use std::{borrow::Cow, fmt::Write, hint::black_box, ptr};
 
-use crate::{Result, ResultExt, Val, bail, in_description_frame};
+use crate::{
+	bail, evaluate::ensure_sufficient_stack, in_description_frame, Error,
+	Result, ResultExt, Val,
+};
 
 pub trait ManifestFormat {
 	fn manifest_buf(&self, val: Val, buf: &mut String) -> Result<()>;
@@ -252,7 +255,7 @@ fn manifest_json_ex_buf(
 				write!(buf, "{:?}", n.to_string()).unwrap();
 			}
 		}
-		Val::Arr(items) => {
+		Val::Arr(items) => ensure_sufficient_stack(|| {
 			buf.push('[');
 
 			let old_len = cur_padding.len();
@@ -304,8 +307,9 @@ fn manifest_json_ex_buf(
 			}
 
 			buf.push(']');
-		}
-		Val::Obj(obj) => {
+			Ok::<_, Error>(())
+		})?,
+		Val::Obj(obj) => ensure_sufficient_stack(|| {
 			obj.run_assertions()?;
 			buf.push('{');
 
@@ -366,7 +370,8 @@ fn manifest_json_ex_buf(
 			}
 
 			buf.push('}');
-		}
+			Ok::<_, Error>(())
+		})?,
 		Val::Func(_) => bail!("tried to manifest function"),
 	}
 	Ok(())
