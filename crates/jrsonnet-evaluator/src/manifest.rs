@@ -68,7 +68,10 @@ impl ManifestFormat for BlackBoxFormat {
 				}
 			}
 			Val::Obj(obj_value) => {
-				for (name, value) in obj_value.iter() {
+				for (name, value) in obj_value.iter(
+					#[cfg(feature = "exp-preserve-order")]
+					true,
+				) {
 					black_box(name);
 					let value = value?;
 					self.manifest_buf(value, buf)?;
@@ -77,6 +80,10 @@ impl ManifestFormat for BlackBoxFormat {
 			Val::Func(func_val) => {
 				black_box(func_val);
 				bail!("tried to manifest function")
+			}
+			#[cfg(feature = "exp-bigint")]
+			Val::BigInt(n) => {
+				black_box(n);
 			}
 		}
 		Ok(())

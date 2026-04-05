@@ -31,5 +31,3 @@ impl<K, V> WithCapacityExt for FxHashMap<K, V> {
 }
 
 pub fn assert_trace<T: Trace>(_v: &T) {}
-
-pub type ImHashMap<K, V> = im_rc::HashMap<K, V, FxBuildHasher>;
