@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_ir::{
 	ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BindSpec, CompSpec, Destruct, DestructRest, Expr,
@@ -110,7 +108,7 @@ parser! {
 			}
 		pub rule destruct_object(s: &ParserSettings) -> Destruct
 			= "{" _
-				fields:(name:id() into:(_ ":" _ into:destruct(s) {into})? default:(_ "=" _ v:spanned(<expr(s)>, s) {v})? {(name, into, default.map(Rc::new))})**comma()
+				fields:(name:id() into:(_ ":" _ into:destruct(s) {into})? default:(_ "=" _ v:spanned(<expr(s)>, s) {v})? {(name, into, default)})**comma()
 				rest:(
 					comma() rest:destruct_rest()? {rest}
 					/ comma()? {None}

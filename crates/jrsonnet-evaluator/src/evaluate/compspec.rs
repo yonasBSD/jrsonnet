@@ -195,7 +195,7 @@ fn evaluate_compspecs_eager(
 ) -> Result<()> {
 	if idx >= specs.len() {
 		collector.reserve(guaranteed_reserve);
-		return collector.collect(ctx.clone());
+		return collector.collect(ctx);
 	}
 	match &specs[idx] {
 		LCompSpec::If(cond) => {
@@ -239,18 +239,20 @@ fn evaluate_compspecs_eager(
 						)?;
 					}
 				}
+				// TODO: Should not be eager? CoW won't work here
 				#[cfg(feature = "exp-destruct")]
 				_ => {
 					for (i, item) in arr.iter().enumerate() {
 						let item_val = item?;
 						let mut inner_builder = ContextBuilder::extend(ctx.clone(), 1);
+						let fctx = Pending::new();
 						destructure::destruct(
 							destruct,
 							Thunk::evaluated(item_val),
-							None,
+							fctx.clone(),
 							&mut inner_builder,
 						);
-						let inner_ctx = inner_builder.build();
+						let inner_ctx = inner_builder.build().into_future(fctx);
 						evaluate_compspecs_eager(
 							inner_ctx,
 							specs,

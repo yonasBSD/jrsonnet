@@ -425,7 +425,7 @@ struct Closures {
 	/// h = 1 => referenced += [], closures += 0, destructs += 1
 	/// And the result is
 	///
-	/// ```
+	/// ```rust,ignore
 	/// Closures {
 	///     referenced: vec![d, e, f, a, b, c, h]
 	///     spec_shapes: vec![(3, 3), (4, 3), (0, 1)],

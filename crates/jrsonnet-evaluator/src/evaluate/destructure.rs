@@ -12,7 +12,7 @@ use crate::{
 #[allow(dead_code, reason = "not dead in exp-destruct")]
 fn destruct_array(
 	start: &[LDestruct],
-	rest: Option<LDestructRest>,
+	rest: Option<&LDestructRest>,
 	end: &[LDestruct],
 
 	value: Thunk<Val>,
@@ -56,7 +56,7 @@ fn destruct_array(
 	if let Some(crate::analyze::LDestructRest::Keep(id)) = rest {
 		let full = full.clone();
 		builder.bind(
-			id,
+			*id,
 			Thunk!(move || {
 				let full = full.evaluate()?;
 				let to = full.len() - end_len;
@@ -88,7 +88,7 @@ fn destruct_array(
 #[allow(dead_code, reason = "not dead in exp-destruct")]
 fn destruct_object(
 	fields: &[LDestructField],
-	rest: Option<LDestructRest>,
+	rest: Option<&LDestructRest>,
 
 	value: Thunk<Val>,
 	fctx: Pending<Context>,
@@ -127,7 +127,7 @@ fn destruct_object(
 	if let Some(crate::analyze::LDestructRest::Keep(id)) = rest {
 		let full = full.clone();
 		builder.bind(
-			id,
+			*id,
 			Thunk!(move || {
 				let full = full.evaluate()?;
 				let mut out = ObjValueBuilder::new();
@@ -178,9 +178,13 @@ pub fn destruct(
 		#[cfg(feature = "exp-destruct")]
 		LDestruct::Skip => {}
 		#[cfg(feature = "exp-destruct")]
-		LDestruct::Array { start, rest, end } => destruct_array(start, rest, end, value, fctx, builder),
+		LDestruct::Array { start, rest, end } => {
+			destruct_array(start, rest.as_ref(), end, value, fctx, builder)
+		}
 		#[cfg(feature = "exp-destruct")]
-		LDestruct::Object { fields, rest } => destruct_object(fields, rest, value, fctx, builder),
+		LDestruct::Object { fields, rest } => {
+			destruct_object(fields, rest.as_ref(), value, fctx, builder)
+		}
 	}
 }
 

@@ -381,7 +381,7 @@ fn destruct_object(p: &mut Parser<'_>) -> Result<Destruct> {
 				None
 			};
 			let default = if p.try_eat(T![=]) {
-				Some(Rc::new(spanned(p, expr)?))
+				Some(spanned(p, expr)?)
 			} else {
 				None
 			};
@@ -466,8 +466,10 @@ fn bind(p: &mut Parser<'_>) -> Result<BindSpec> {
 		if !p.at(SyntaxKind::IDENT) {
 			let d = destruct(p)?;
 			p.eat(T![=])?;
-			let value = Rc::new(expr(p)?);
-			return Ok(BindSpec::Field { into: d, value });
+			return Ok(BindSpec::Field {
+				into: d,
+				value: expr(p)?,
+			});
 		}
 	}
 	let name_spanned = spanned(p, ident)?;
