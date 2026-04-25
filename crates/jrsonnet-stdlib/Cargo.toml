@@ -43,6 +43,7 @@ serde_json.workspace = true
 # std.parseYaml
 serde-saphyr.workspace = true
 
+hex.workspace = true
 num-bigint = { workspace = true, optional = true }
 
 # regex

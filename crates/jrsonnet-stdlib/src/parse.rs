@@ -1,4 +1,5 @@
 use jrsonnet_evaluator::{IStr, Result, Val, function::builtin, runtime_error};
+use serde_saphyr::options;
 
 #[builtin]
 pub fn builtin_parse_json(str: IStr) -> Result<Val> {
@@ -13,12 +14,11 @@ pub fn builtin_parse_yaml(str: IStr) -> Result<Val> {
 
 	let mut out = serde_saphyr::from_multiple_with_options::<Val>(
 		&str,
-		serde_saphyr::Options {
+		options! {
 			// Golang/C++ compat
 			legacy_octal_numbers: true,
 			// Disable budget limits - we trust the YAML input
 			budget: None,
-			..Default::default()
 		},
 	)
 	.map_err(|e| runtime_error!("failed to parse yaml: {e}"))?;
