@@ -4,7 +4,6 @@ use std::{
 	ops::ControlFlow,
 };
 
-use im_rc::Vector;
 use jrsonnet_gcmodule::{Cc, Trace};
 use jrsonnet_ir::IStr;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -118,7 +117,7 @@ impl ObjectCore for OopObject {
 
 #[allow(clippy::module_name_repetitions)]
 pub struct ObjValueBuilder {
-	sup: Vector<CcObjectCore>,
+	sup: Vec<CcObjectCore>,
 	has_assertions: bool,
 
 	new: OopObject,
@@ -130,7 +129,7 @@ impl ObjValueBuilder {
 	}
 	pub fn with_capacity(capacity: usize) -> Self {
 		Self {
-			sup: Vector::new(),
+			sup: Vec::new(),
 			has_assertions: false,
 			new: OopObject::new(FxHashMap::with_capacity(capacity), None),
 			next_field_index: FieldIndex::default(),
@@ -141,7 +140,7 @@ impl ObjValueBuilder {
 	}
 	pub fn with_super(&mut self, super_obj: ObjValue) -> &mut Self {
 		self.has_assertions |= super_obj.0.has_assertions;
-		self.sup = super_obj.0.cores.clone();
+		self.sup.clone_from(&super_obj.0.cores);
 		self
 	}
 
@@ -178,20 +177,19 @@ impl ObjValueBuilder {
 
 	pub fn extend_with_core(&mut self, core: impl ObjectCore) {
 		self.commit();
-		self.sup.push_back(CcObjectCore::new(core));
+		self.sup.push(CcObjectCore::new(core));
 	}
 
 	fn commit(&mut self) {
 		if !self.new.is_empty() {
-			self.sup
-				.push_back(CcObjectCore::new(mem::take(&mut self.new)));
+			self.sup.push(CcObjectCore::new(mem::take(&mut self.new)));
 		}
 		self.next_field_index = FieldIndex::default();
 	}
 
 	pub fn with_fields_omitted(&mut self, omit: FxHashSet<IStr>) {
 		self.commit();
-		self.sup.push_back(CcObjectCore::new(OmitFieldsCore {
+		self.sup.push(CcObjectCore::new(OmitFieldsCore {
 			omit,
 			prev_layers: self.sup.len(),
 		}));

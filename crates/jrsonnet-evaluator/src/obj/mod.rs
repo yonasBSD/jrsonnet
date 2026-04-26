@@ -11,7 +11,6 @@ use std::{
 };
 
 use educe::Educe;
-use im_rc::{Vector, vector};
 use jrsonnet_gcmodule::{Acyclic, Cc, Trace, Weak, cc_dyn};
 use jrsonnet_interner::IStr;
 use jrsonnet_ir::Span;
@@ -97,7 +96,7 @@ impl FieldSortKey {
 
 // 0 - add
 //  12 - visibility
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Acyclic)]
 pub struct ObjFieldFlags(u8);
 impl ObjFieldFlags {
 	fn new(add: bool, visibility: Visibility) -> Self {
@@ -136,7 +135,6 @@ impl Debug for ObjFieldFlags {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Trace)]
 pub struct ObjMember {
-	#[trace(skip)]
 	flags: ObjFieldFlags,
 	original_index: FieldIndex,
 	pub invoke: MaybeUnbound,
@@ -240,7 +238,7 @@ cc_dyn!(
 #[derive(Trace, Educe)]
 #[educe(Debug)]
 struct ObjValueInner {
-	cores: Vector<CcObjectCore>,
+	cores: Vec<CcObjectCore>,
 	assertions_ran: Cell<bool>,
 	has_assertions: bool,
 	value_cache: RefCell<FxHashMap<(IStr, CoreIdx), CacheValue>>,
@@ -268,7 +266,7 @@ fn finish_asserting(obj: &ObjValue) {
 
 thread_local! {
 	static EMPTY_OBJ: ObjValue = ObjValue(Cc::new(ObjValueInner {
-		cores: vector![],
+		cores: vec![],
 		assertions_ran: Cell::new(true),
 		has_assertions: false,
 		value_cache: RefCell::default(),
@@ -495,7 +493,10 @@ impl ObjValue {
 
 	#[must_use]
 	pub fn extend_from(&self, sup: Self) -> Self {
-		let cores = sup.0.cores.clone() + self.0.cores.clone();
+		let mut cores = Vec::with_capacity(sup.0.cores.len() + self.0.cores.len());
+		cores.extend(sup.0.cores.iter().cloned());
+		cores.extend(self.0.cores.iter().cloned());
+
 		let has_assertions = sup.0.has_assertions || self.0.has_assertions;
 		ObjValue(Cc::new(ObjValueInner {
 			cores,
