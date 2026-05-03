@@ -3,7 +3,6 @@
 use jrsonnet_evaluator::{
 	Either, IStr, ObjValue, ObjValueBuilder, Result, ResultExt, Thunk, Val, bail, error,
 	function::{NativeFn, builtin},
-	runtime_error,
 	typed::{BoundedUsize, Either2, FromUntyped},
 	val::{ArrValue, IndexableVal, equals},
 };
@@ -40,8 +39,7 @@ pub fn builtin_repeat(what: Either![IStr, ArrValue], count: u32) -> Result<Val> 
 	Ok(match what {
 		Either2::A(s) => Val::string(s.repeat(count as usize)),
 		Either2::B(arr) => Val::Arr(
-			ArrValue::repeated(arr, count)
-				.ok_or_else(|| runtime_error!("repeated length overflow"))?,
+			ArrValue::repeated(arr, count).ok_or_else(|| error!("repeated length overflow"))?,
 		),
 	})
 }
