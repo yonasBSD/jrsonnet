@@ -5,7 +5,7 @@ resolver = "2"
 
 [workspace.package]
 authors = ["Yaroslav Bolyukin <iam@lach.pw>"]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/CertainLach/jrsonnet"
 version = "0.5.0-pre98"
@@ -22,7 +22,7 @@ jrsonnet-stdlib = { path = "./crates/jrsonnet-stdlib", version = "0.5.0-pre98" }
 jrsonnet-cli = { path = "./crates/jrsonnet-cli", version = "0.5.0-pre98" }
 jrsonnet-types = { path = "./crates/jrsonnet-types", version = "0.5.0-pre98" }
 jrsonnet-formatter = { path = "./crates/jrsonnet-formatter", version = "0.5.0-pre98" }
-jrsonnet-gcmodule = { version = "0.4.4" }
+jrsonnet-gcmodule = { version = "0.4.5" }
 # Diagnostics.
 # hi-doc is my library, which handles text formatting very well, but isn't polished enough yet
 # Previous implementation was based on annotate-snippets, which I don't like for many reasons.
