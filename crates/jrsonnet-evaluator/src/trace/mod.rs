@@ -2,7 +2,7 @@
 use std::cell::RefCell;
 use std::{
 	any::Any,
-	path::{Path, PathBuf},
+	path::{Component, Path, PathBuf},
 };
 
 use jrsonnet_gcmodule::Trace;
@@ -40,10 +40,19 @@ impl PathResolver {
 				if from.is_relative() {
 					return from.to_string_lossy().into_owned();
 				}
-				pathdiff::diff_paths(from, base)
-					.expect("base is absolute")
-					.to_string_lossy()
-					.into_owned()
+				let diff = pathdiff::diff_paths(from, base).expect("base is absolute");
+				let parents = diff
+					.components()
+					.take_while(|c| matches!(c, Component::ParentDir))
+					.count();
+				let base_depth = base
+					.components()
+					.filter(|c| matches!(c, Component::Normal(_)))
+					.count();
+				if parents > 0 && parents >= base_depth {
+					return from.to_string_lossy().into_owned();
+				}
+				diff.to_string_lossy().into_owned()
 			}
 		}
 	}
