@@ -1,19 +1,25 @@
-use std::result::Result;
+#![allow(clippy::future_not_send, reason = "we work with js promises anyway")]
+
+use std::{cell::RefCell, result::Result};
 
 use jrsonnet_evaluator::{
-	NumValue, Result as JrResult, SourcePath, SourceUrl, State, StateBuilder, Val,
+	IStr, NumValue, ObjValue, Result as JrResult, SourcePath, SourceUrl, State, StateBuilder, Val,
 	async_import::{ResolvedImportResolver, async_import},
 	error,
 	function::builtin::{NativeCallback, NativeCallbackHandler},
 	manifest::{JsonFormat, ManifestFormat, StringFormat, ToStringFormat, YamlStreamFormat},
-	trace::{JsFormat, PathResolver, TraceFormat},
+	tla::{TlaArg, apply_tla},
+	trace::PathResolver,
+	val::ArrValue,
 	with_state,
 };
 use jrsonnet_formatter::FormatOptions;
 use jrsonnet_gcmodule::Trace;
 use jrsonnet_stdlib::{IniFormat, TomlFormat, XmlJsonmlFormat, YamlFormat};
 use jrsonnet_types::ValType;
-use wasm_bindgen::prelude::*;
+use js_sys::Reflect::get;
+use rustc_hash::FxHashMap;
+use wasm_bindgen::{convert::RefFromWasmAbi, prelude::*};
 
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
@@ -27,36 +33,59 @@ pub enum ValKind {
 	Func,
 }
 
-#[wasm_bindgen(inline_js = r"
-export class JrsonnetError extends Error {
-	constructor(message, frames) {
-		super(message);
-		this.name = 'JrsonnetError';
-		this.frames = frames;
-	}
+thread_local! {
+	static ERR_FACTORY: RefCell<Option<js_sys::Function>> = const { RefCell::new(None) };
 }
-export function makeJrsonnetError(message, frames) {
-	return new JrsonnetError(message, frames);
+#[wasm_bindgen(js_name = setErrorFactory)]
+pub fn set_error_factory(f: js_sys::Function) {
+	ERR_FACTORY.with(|c| *c.borrow_mut() = Some(f));
 }
-")]
-extern "C" {
-	#[wasm_bindgen(js_name = makeJrsonnetError)]
-	fn make_jrsonnet_error(message: &str, frames: js_sys::Array) -> JsValue;
+fn make_jrsonnet_error(message: &str, frames: js_sys::Array, cause: &JsValue) -> JsValue {
+	ERR_FACTORY.with(|c| {
+		c.borrow().as_ref().map_or_else(
+			|| js_sys::Error::new(message).into(),
+			|f| {
+				let args = js_sys::Array::new();
+				args.push(&JsValue::from_str(message));
+				args.push(&frames);
+				args.push(cause);
+				f.apply(&JsValue::NULL, &args)
+					.unwrap_or_else(|e| js_sys::Error::new(&format!("{e:?}")).into())
+			},
+		)
+	})
 }
 
-#[wasm_bindgen(typescript_custom_section)]
-const TS_JRSONNET_ERROR: &'static str = r"
-export interface JrsonnetFrame {
-	desc: string;
-	path?: string;
-	line?: number;
-	column?: number;
+fn js_error_message(e: &JsValue) -> String {
+	e.dyn_ref::<js_sys::Error>().map_or_else(
+		|| e.as_string().unwrap_or_else(|| format!("{e:?}")),
+		|err| String::from(err.message()),
+	)
 }
-export class JrsonnetError extends Error {
-	name: 'JrsonnetError';
-	frames: JrsonnetFrame[];
+
+fn unwrap_val_ref(value: &JsValue) -> Result<<WasmVal as RefFromWasmAbi>::Anchor, JsValue> {
+	let ptr = get(value, &JsValue::from_str("__wbg_ptr"))
+		.ok()
+		.and_then(|v| v.as_f64())
+		.ok_or_else(|| JsValue::from_str("expected a Val instance"))? as u32;
+	if ptr == 0 {
+		return Err(JsValue::from_str("Val has been freed"));
+	}
+	Ok(unsafe { <WasmVal as RefFromWasmAbi>::ref_from_abi(ptr) })
 }
-";
+
+fn js_resolver_error(prefix: &str, e: JsValue) -> JsValue {
+	let msg = format!("{prefix}: {}", js_error_message(&e));
+	let frames = js_sys::Array::new();
+	let frame = js_sys::Object::new();
+	let _ = js_sys::Reflect::set(
+		&frame,
+		&JsValue::from_str("desc"),
+		&JsValue::from_str(prefix),
+	);
+	frames.push(&frame);
+	make_jrsonnet_error(&msg, frames, &e)
+}
 
 fn jrsonnet_js_error(e: &jrsonnet_evaluator::Error) -> JsValue {
 	let msg = e.error().to_string();
@@ -90,7 +119,7 @@ fn jrsonnet_js_error(e: &jrsonnet_evaluator::Error) -> JsValue {
 		}
 		frames.push(&frame);
 	}
-	make_jrsonnet_error(&msg, frames)
+	make_jrsonnet_error(&msg, frames, &JsValue::UNDEFINED)
 }
 
 impl From<ValType> for ValKind {
@@ -107,7 +136,7 @@ impl From<ValType> for ValKind {
 	}
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = Val)]
 pub struct WasmVal {
 	val: Val,
 	state: Option<State>,
@@ -121,12 +150,6 @@ impl WasmVal {
 		Self {
 			val,
 			state: Some(state),
-		}
-	}
-	fn child(&self, val: Val) -> Self {
-		Self {
-			val,
-			state: self.state.clone(),
 		}
 	}
 	fn run<R>(&self, f: impl FnOnce(&Val) -> R) -> R {
@@ -143,7 +166,7 @@ impl WasmVal {
 	}
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_class = Val)]
 impl WasmVal {
 	pub fn null() -> Self {
 		Self::new(Val::Null)
@@ -167,7 +190,7 @@ impl WasmVal {
 	pub fn func(
 		params: Vec<String>,
 
-		#[wasm_bindgen(unchecked_param_type = "(...args: WasmVal[]) => WasmVal")]
+		#[wasm_bindgen(unchecked_param_type = "(...args: Val[]) => Val")]
 		callback: js_sys::Function,
 	) -> Self {
 		#[allow(deprecated)]
@@ -181,52 +204,76 @@ impl WasmVal {
 	pub fn kind(&self) -> ValKind {
 		self.val.value_type().into()
 	}
+	#[wasm_bindgen(js_name = asBool)]
 	pub fn as_bool(&self) -> Option<bool> {
 		self.val.as_bool()
 	}
+	#[wasm_bindgen(js_name = asNum)]
 	pub fn as_num(&self) -> Option<f64> {
 		self.val.as_num()
 	}
+	#[wasm_bindgen(js_name = asString)]
 	pub fn as_string(&self) -> Option<String> {
 		self.val.as_str().map(|s| s.to_string())
 	}
-	pub fn arr_len(&self) -> Option<u32> {
-		self.val.as_arr().map(|a| a.len())
+	#[wasm_bindgen(js_name = asArr)]
+	pub fn as_arr(&self) -> Option<WasmArrValue> {
+		self.val.as_arr().map(|arr| WasmArrValue {
+			arr,
+			state: self.state.clone(),
+		})
 	}
-	pub fn arr_at(&self, index: u32) -> Result<Option<WasmVal>, JsValue> {
-		let Some(a) = self.val.as_arr() else {
-			return Ok(None);
-		};
-		self.run(|_| a.get(index))
-			.map(|opt| opt.map(|v| self.child(v)))
-			.map_err(|e| jrsonnet_js_error(&e))
+	#[wasm_bindgen(js_name = asObj)]
+	pub fn as_obj(&self) -> Option<WasmObjValue> {
+		self.val.as_obj().map(|obj| WasmObjValue {
+			obj,
+			state: self.state.clone(),
+		})
 	}
-	pub fn obj_keys(&self) -> Option<Vec<String>> {
-		self.val
-			.as_obj()
-			.map(|o| o.fields().into_iter().map(|s| s.to_string()).collect())
-	}
-	pub fn obj_get(&self, key: String) -> Result<Option<WasmVal>, JsValue> {
-		let Some(o) = self.val.as_obj() else {
-			return Ok(None);
-		};
-		self.run(|_| o.get(key.into()))
-			.map(|opt| opt.map(|v| self.child(v)))
+
+	#[wasm_bindgen(js_name = applyTla)]
+	pub fn apply_tla(
+		&self,
+		#[wasm_bindgen(unchecked_param_type = "Record<string, Val>")] args: &js_sys::Object,
+	) -> Result<WasmVal, JsValue> {
+		let mut map: FxHashMap<IStr, TlaArg> = FxHashMap::default();
+		for entry in js_sys::Object::entries(args).iter() {
+			let pair: js_sys::Array = entry
+				.dyn_into()
+				.map_err(|_| JsValue::from_str("expected [key, value] entry"))?;
+			let key = pair
+				.get(0)
+				.as_string()
+				.ok_or_else(|| JsValue::from_str("TLA arg key must be a string"))?;
+			let value = unwrap_val_ref(&pair.get(1))?;
+			map.insert(key.into(), TlaArg::Val(value.val.clone()));
+		}
+		let val = self.val.clone();
+		self.run(|_| apply_tla(&map, val))
+			.map(|v| WasmVal {
+				val: v,
+				state: self.state.clone(),
+			})
 			.map_err(|e| jrsonnet_js_error(&e))
 	}
 
+	#[wasm_bindgen(js_name = manifestJson)]
 	pub fn manifest_json(&self, indent: u32) -> Result<String, JsValue> {
 		self.manifest_with(JsonFormat::cli(indent as usize))
 	}
+	#[wasm_bindgen(js_name = manifestToString)]
 	pub fn manifest_to_string(&self) -> Result<String, JsValue> {
 		self.manifest_with(ToStringFormat)
 	}
+	#[wasm_bindgen(js_name = manifestString)]
 	pub fn manifest_string(&self) -> Result<String, JsValue> {
 		self.manifest_with(StringFormat)
 	}
+	#[wasm_bindgen(js_name = manifestYaml)]
 	pub fn manifest_yaml(&self, indent: u32, quote_keys: bool) -> Result<String, JsValue> {
 		self.manifest_with(YamlFormat::std_to_yaml(indent != 0, quote_keys))
 	}
+	#[wasm_bindgen(js_name = manifestYamlStream)]
 	pub fn manifest_yaml_stream(
 		&self,
 		indent: u32,
@@ -238,14 +285,81 @@ impl WasmVal {
 			c_document_end,
 		))
 	}
+	#[wasm_bindgen(js_name = manifestXmlJsonml)]
 	pub fn manifest_xml_jsonml(&self) -> Result<String, JsValue> {
 		self.manifest_with(XmlJsonmlFormat::std_to_xml())
 	}
+	#[wasm_bindgen(js_name = manifestToml)]
 	pub fn manifest_toml(&self, indent: u32) -> Result<String, JsValue> {
 		self.manifest_with(TomlFormat::std_to_toml(" ".repeat(indent as usize)))
 	}
+	#[wasm_bindgen(js_name = manifestIni)]
 	pub fn manifest_ini(&self) -> Result<String, JsValue> {
 		self.manifest_with(IniFormat::std())
+	}
+}
+
+#[wasm_bindgen(js_name = ArrValue)]
+pub struct WasmArrValue {
+	arr: ArrValue,
+	state: Option<State>,
+}
+
+#[wasm_bindgen(js_class = ArrValue)]
+impl WasmArrValue {
+	#[wasm_bindgen(getter)]
+	pub fn length(&self) -> u32 {
+		self.arr.len()
+	}
+	pub fn at(&self, index: u32) -> Result<Option<WasmVal>, JsValue> {
+		let result = self.state.as_ref().map_or_else(
+			|| self.arr.get(index),
+			|state| {
+				let _guard = state.try_enter();
+				self.arr.get(index)
+			},
+		);
+		result
+			.map(|opt: Option<Val>| {
+				opt.map(|v| WasmVal {
+					val: v,
+					state: self.state.clone(),
+				})
+			})
+			.map_err(|e| jrsonnet_js_error(&e))
+	}
+}
+
+#[wasm_bindgen(js_name = ObjValue)]
+pub struct WasmObjValue {
+	obj: ObjValue,
+	state: Option<State>,
+}
+
+#[wasm_bindgen(js_class = ObjValue)]
+impl WasmObjValue {
+	pub fn keys(&self) -> Vec<String> {
+		self.obj
+			.fields()
+			.into_iter()
+			.map(|s| s.to_string())
+			.collect()
+	}
+	pub fn get(&self, key: String) -> Result<Option<WasmVal>, JsValue> {
+		let result = if let Some(state) = &self.state {
+			let _guard = state.try_enter();
+			self.obj.get(key.into())
+		} else {
+			self.obj.get(key.into())
+		};
+		result
+			.map(|opt: Option<Val>| {
+				opt.map(|v| WasmVal {
+					val: v,
+					state: self.state.clone(),
+				})
+			})
+			.map_err(|e| jrsonnet_js_error(&e))
 	}
 }
 
@@ -292,15 +406,15 @@ impl NativeCallbackHandler for JsHandler {
 	}
 }
 
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = State)]
 pub struct WasmState {
 	state: State,
-	resolver: JsAsyncResolver,
+	resolver: Option<JsAsyncResolver>,
 }
-#[wasm_bindgen]
+#[wasm_bindgen(js_class = State)]
 impl WasmState {
 	#[wasm_bindgen(constructor)]
-	pub fn new(resolver: ImportResolverJs) -> Self {
+	pub fn new(resolver: Option<ImportResolverJs>) -> Self {
 		console_error_panic_hook::set_once();
 		let mut state = StateBuilder::default();
 		state.import_resolver(ResolvedImportResolver::new());
@@ -309,11 +423,11 @@ impl WasmState {
 		let state = state.build();
 		Self {
 			state,
-			resolver: JsAsyncResolver { js: resolver },
+			resolver: resolver.map(|js| JsAsyncResolver { js }),
 		}
 	}
 
-	#[wasm_bindgen]
+	#[wasm_bindgen(js_name = evaluateSnippet)]
 	pub fn evaluate_snippet(&self, name: &str, snippet: &str) -> Result<WasmVal, JsValue> {
 		let _guard = self.state.enter();
 		self.state
@@ -322,8 +436,35 @@ impl WasmState {
 			.map_err(|e| jrsonnet_js_error(&e))
 	}
 
+	#[wasm_bindgen(js_name = evaluateFile)]
 	pub async fn evaluate_file(&self, path: String) -> Result<WasmVal, JsValue> {
-		let path = async_import(self.state.clone(), self.resolver.clone(), &path.as_str()).await?;
+		self.evaluate_file_from_impl(None, path).await
+	}
+
+	#[wasm_bindgen(js_name = evaluateFileFrom)]
+	pub async fn evaluate_file_from(&self, from: String, path: String) -> Result<WasmVal, JsValue> {
+		self.evaluate_file_from_impl(Some(from), path).await
+	}
+}
+
+impl WasmState {
+	async fn evaluate_file_from_impl(
+		&self,
+		from: Option<String>,
+		path: String,
+	) -> Result<WasmVal, JsValue> {
+		let resolver = self
+			.resolver
+			.clone()
+			.ok_or_else(|| JsValue::from_str("file evaluation requires an ImportResolver"))?;
+		let from = match from {
+			Some(s) => {
+				let url = url::Url::parse(&s).map_err(|e| JsValue::from_str(&e.to_string()))?;
+				SourcePath::new(SourceUrl::new(url))
+			}
+			None => SourcePath::default(),
+		};
+		let path = async_import(self.state.clone(), resolver, &from, &path.as_str()).await?;
 		let _guard = self.state.enter();
 		self.state
 			.import_resolved(path)
@@ -375,8 +516,13 @@ impl jrsonnet_evaluator::async_import::AsyncImportResolver for JsAsyncResolver {
 	) -> Result<SourcePath, JsValue> {
 		let from_js = (!from.is_default()).then(|| from.to_string());
 		let path_str = path.as_path().as_ref().to_string_lossy().into_owned();
-		let promise = self.js.resolve_from(from_js, &path_str)?;
-		let resolved_js = wasm_bindgen_futures::JsFuture::from(promise).await?;
+		let promise = self
+			.js
+			.resolve_from(from_js, &path_str)
+			.map_err(|e| js_resolver_error("resolveFrom", e))?;
+		let resolved_js = wasm_bindgen_futures::JsFuture::from(promise)
+			.await
+			.map_err(|e| js_resolver_error("resolveFrom", e))?;
 		let resolved_str = resolved_js
 			.as_string()
 			.ok_or_else(|| JsValue::from_str("resolveFrom must return string"))?;
@@ -386,8 +532,13 @@ impl jrsonnet_evaluator::async_import::AsyncImportResolver for JsAsyncResolver {
 
 	async fn load_file_contents(&self, resolved: &SourcePath) -> Result<Vec<u8>, JsValue> {
 		let resolved_str = resolved.to_string();
-		let promise = self.js.load_file_contents(&resolved_str)?;
-		let bytes_js = wasm_bindgen_futures::JsFuture::from(promise).await?;
+		let promise = self
+			.js
+			.load_file_contents(&resolved_str)
+			.map_err(|e| js_resolver_error("loadFileContents", e))?;
+		let bytes_js = wasm_bindgen_futures::JsFuture::from(promise)
+			.await
+			.map_err(|e| js_resolver_error("loadFileContents", e))?;
 		let arr = bytes_js
 			.dyn_into::<js_sys::Uint8Array>()
 			.map_err(|_| JsValue::from_str("loadFileContents must return Uint8Array"))?;
@@ -395,17 +546,27 @@ impl jrsonnet_evaluator::async_import::AsyncImportResolver for JsAsyncResolver {
 	}
 }
 
-#[wasm_bindgen]
-pub struct WasmFormatOptions {}
-#[wasm_bindgen]
+#[wasm_bindgen(js_name = FormatOptions)]
+pub struct WasmFormatOptions {
+	indent: u8,
+}
+#[wasm_bindgen(js_class = FormatOptions)]
 impl WasmFormatOptions {
 	#[wasm_bindgen(constructor)]
 	pub fn new() -> Self {
-		Self {}
+		Self { indent: 0 }
 	}
 
 	fn build(&self) -> FormatOptions {
-		FormatOptions { indent: 0 }
+		FormatOptions {
+			indent: self.indent,
+		}
+	}
+}
+
+impl Default for WasmFormatOptions {
+	fn default() -> Self {
+		Self::new()
 	}
 }
 

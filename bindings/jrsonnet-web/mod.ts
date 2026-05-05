@@ -1,60 +1,71 @@
 import { assert } from "@std/assert";
 import {
-  format as formatRaw,
-  type ImportResolver,
-  WasmFormatOptions,
-  WasmState,
-  WasmVal,
+	ArrValue,
+	type ImportResolver,
+	ObjValue,
+	setErrorFactory,
+	State,
+	Val,
+	ValKind,
 } from "./lib/jsonnet_web.js";
 
-export { type ImportResolver, WasmFormatOptions, WasmState, WasmVal };
-
-class FetchImportResolver implements ImportResolver {
-  constructor(public base: string) {}
-
-  resolution = new Map<string, URL>();
-  response = new Map<string, Response>();
-
-  async resolveFrom(from: string | undefined, path: string): Promise<string> {
-    let resolved: URL;
-    if (from) {
-      resolved = new URL(path, from);
-    } else {
-      resolved = new URL(path, this.base);
-    }
-    const resolvingStr = resolved.toString();
-    resolved = this.resolution.get(resolvingStr) ?? resolved;
-
-    const resolvedStr = resolved.toString();
-    if (!this.response.has(resolvedStr)) {
-      console.log(resolved);
-      const v = await fetch(resolved);
-      this.response.set(resolvedStr, v);
-      resolved = new URL(v.url);
-      this.resolution.set(resolvingStr, resolved);
-    }
-    return resolved.toString();
-  }
-  loadFileContents(resolved: string): Promise<Uint8Array> {
-    console.log(resolved);
-    const v = this.response.get(resolved);
-    assert(v, "should be resolved");
-    return v.bytes();
-  }
+export interface JrsonnetFrame {
+	desc: string;
+	path?: string;
+	line?: number;
+	column?: number;
 }
 
-//
-// try {
-//   console.log("eval file");
-//   await state.evaluate_file("example.jsonnet");
-//   console.log("eval file done");
-// } catch (e) {
-//   console.log(e);
-// }
-//
-export function format(
-  code: string,
-  opts: WasmFormatOptions = new WasmFormatOptions(),
-): string {
-  return formatRaw(code, opts);
+export class JrsonnetError extends Error {
+	override name = "JrsonnetError" as const;
+	frames: JrsonnetFrame[];
+
+	constructor(message: string, frames: JrsonnetFrame[], cause?: unknown) {
+		super(message, cause !== undefined ? { cause } : undefined);
+		this.frames = frames;
+	}
+}
+
+setErrorFactory(
+	(message: string, frames: JrsonnetFrame[], cause: unknown) =>
+		new JrsonnetError(message, frames, cause),
+);
+
+export { ArrValue, type ImportResolver, ObjValue, State, Val, ValKind };
+
+export class FetchImportResolver implements ImportResolver {
+	constructor(base: URL | string) {
+		this.#base = new URL(base);
+	}
+
+	#base: URL;
+	#resolution = new Map<string, string>();
+	#bytes = new Map<string, Uint8Array>();
+
+	async resolveFrom(from: string | undefined, path: string): Promise<string> {
+		const base = from !== undefined ? from : this.#base;
+		const requestStr = new URL(path, base).toString();
+
+		const cached = this.#resolution.get(requestStr);
+		if (cached !== undefined) return cached;
+
+		const resp = await fetch(requestStr);
+		if (!resp.ok) {
+			throw new Error(
+				`fetch ${requestStr}: HTTP ${resp.status} ${resp.statusText}`,
+			);
+		}
+		const canonical = resp.url;
+		if (!this.#bytes.has(canonical)) {
+			this.#bytes.set(canonical, await resp.bytes());
+		}
+		this.#resolution.set(requestStr, canonical);
+		return canonical;
+	}
+
+	loadFileContents(resolved: string): Promise<Uint8Array> {
+		const bytes = this.#bytes.get(resolved);
+		assert(bytes, `not loaded: ${resolved}`);
+		return Promise.resolve(bytes);
+	}
 }

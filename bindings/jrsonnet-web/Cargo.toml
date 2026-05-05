@@ -1,6 +1,8 @@
 [package]
 name = "jrsonnet-web"
-description = "WASM JS bindings for jrsonnet"
+description = "WebAssembly JavaScript bindings for jrsonnet"
+keywords = ["jsonnet", "wasm", "web"]
+categories = ["wasm"]
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -17,6 +19,7 @@ jrsonnet-gcmodule.workspace = true
 jrsonnet-stdlib.workspace = true
 jrsonnet-types.workspace = true
 js-sys.workspace = true
+rustc-hash.workspace = true
 url.workspace = true
 wasm-bindgen.workspace = true
 wasm-bindgen-futures.workspace = true
