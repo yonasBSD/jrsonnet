@@ -1,6 +1,8 @@
 [package]
 name = "jrsonnet-ir-parser"
-description = "Jrsonnet hand-rolled parser which parses source directly into IR"
+description = "Hand-rolled recursive-descent parser that produces jrsonnet IR directly"
+keywords = ["jsonnet", "parser"]
+categories = ["parser-implementations"]
 authors.workspace = true
 edition.workspace = true
 license.workspace = true

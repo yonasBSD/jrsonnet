@@ -1,6 +1,9 @@
 [package]
 name = "jrsonnet-evaluator"
-description = "jsonnet interpreter"
+description = "Rust implementation of the jsonnet language interpreter"
+keywords = ["jsonnet", "interpreter", "config"]
+categories = ["compilers", "template-engine", "config"]
+readme = "README.adoc"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true

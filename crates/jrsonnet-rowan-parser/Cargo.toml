@@ -1,6 +1,8 @@
 [package]
 name = "jrsonnet-rowan-parser"
-description = "Rowan-based CST for jrsonnet"
+description = "Rowan-based concrete syntax tree parser for jsonnet, suitable for tooling and LSP"
+keywords = ["jsonnet", "parser", "rowan", "cst"]
+categories = ["parser-implementations"]
 authors.workspace = true
 edition.workspace = true
 license.workspace = true

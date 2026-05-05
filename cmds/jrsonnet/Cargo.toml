@@ -1,6 +1,8 @@
 [package]
 name = "jrsonnet"
-description = "Rust jsonnet implementation"
+description = "Rust implementation of the jsonnet command-line interpreter"
+keywords = ["jsonnet", "json", "config", "cli"]
+categories = ["command-line-utilities", "config", "template-engine"]
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
