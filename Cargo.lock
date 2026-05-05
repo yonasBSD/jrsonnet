@@ -984,14 +984,18 @@ dependencies = [
 
 [[package]]
 name = "jrsonnet-gcmodule"
-version = "0.4.5"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb04c12f50f954e1d8b3b5a7e99c448da97af2e1f7435a88f3c9b9f2a677015a"
 dependencies = [
  "jrsonnet-gcmodule-derive",
 ]
 
 [[package]]
 name = "jrsonnet-gcmodule-derive"
-version = "0.4.5"
+version = "0.4.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "454a895e7c0b7ea3584966e8b346c6c80fdd33acb0224ad7e3fbd80cf8171601"
 dependencies = [
  "proc-macro2",
  "quote",

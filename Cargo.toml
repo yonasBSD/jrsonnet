@@ -30,7 +30,7 @@ jrsonnet-cli = { path = "./crates/jrsonnet-cli", version = "0.5.0-pre98" }
 jrsonnet-types = { path = "./crates/jrsonnet-types", version = "0.5.0-pre98" }
 jrsonnet-formatter = { path = "./crates/jrsonnet-formatter", version = "0.5.0-pre98" }
 jrsonnet-lexer = { path = "./crates/jrsonnet-lexer", version = "0.5.0-pre98" }
-jrsonnet-gcmodule = { version = "0.4.5" }
+jrsonnet-gcmodule = { version = "0.4.6" }
 # Diagnostics.
 # hi-doc is my library, which handles text formatting very well, but isn't polished enough yet
 # Previous implementation was based on annotate-snippets, which I don't like for many reasons.
@@ -168,12 +168,6 @@ manual_let_else = "allow"
 # Something is broken about that lint, can't be allowed for
 # codegenerated-stdlib block
 similar_names = "allow"
-
-#[profile.test]
-#opt-level = 1
-
-[patch.crates-io]
-jrsonnet-gcmodule = { path = "/home/lach/build/gcmodule" }
 
 [profile.release]
 opt-level = 3
