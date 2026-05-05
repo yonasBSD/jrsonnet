@@ -43,7 +43,7 @@ pub extern "C" fn _start() {}
 /// Conforms to [semantic versioning](http://semver.org/).
 /// If this does not match `LIB_JSONNET_VERSION`
 /// then there is a mismatch between header and compiled library.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn jsonnet_version() -> &'static [u8; 12] {
 	b"v0.22.0-rc1\0"
 }
@@ -130,7 +130,7 @@ impl VM {
 }
 
 /// Creates a new Jsonnet virtual machine.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(clippy::box_default)]
 pub extern "C" fn jsonnet_make() -> *mut VM {
 	let mut state = State::builder();
@@ -147,14 +147,14 @@ pub extern "C" fn jsonnet_make() -> *mut VM {
 }
 
 /// Complement of [`jsonnet_vm_make`].
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(clippy::boxed_local)]
 pub extern "C" fn jsonnet_destroy(vm: Box<VM>) {
 	drop(vm);
 }
 
 /// Set the maximum stack depth.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn jsonnet_max_stack(_vm: &VM, v: c_uint) {
 	set_stack_depth_limit(v as usize);
 }
@@ -162,17 +162,17 @@ pub extern "C" fn jsonnet_max_stack(_vm: &VM, v: c_uint) {
 /// Set the number of objects required before a garbage collection cycle is allowed.
 ///
 /// No-op for now
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn jsonnet_gc_min_objects(_vm: &VM, _v: c_uint) {}
 
 /// Run the garbage collector after this amount of growth in the number of objects
 ///
 /// No-op for now
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn jsonnet_gc_growth_trigger(_vm: &VM, _v: c_double) {}
 
 /// Expect a string as output and don't JSON encode it.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn jsonnet_string_output(vm: &mut VM, v: c_int) {
 	vm.manifest_format = match v {
 		0 => Box::new(JsonFormat::default()),
@@ -189,7 +189,7 @@ pub extern "C" fn jsonnet_string_output(vm: &mut VM, v: c_int) {
 /// `buf` should be either previosly allocated by this library, or NULL
 ///
 /// This function is most definitely broken, but it works somehow, see TODO inside
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn jsonnet_realloc(_vm: &VM, buf: *mut u8, sz: usize) -> *mut u8 {
 	if buf.is_null() {
 		if sz == 0 {
@@ -214,14 +214,14 @@ pub unsafe extern "C" fn jsonnet_realloc(_vm: &VM, buf: *mut u8, sz: usize) -> *
 /// Clean up a JSON subtree.
 ///
 /// This is useful if you want to abort with an error mid-way through building a complex value.
-#[no_mangle]
+#[unsafe(no_mangle)]
 #[allow(clippy::boxed_local)]
 pub extern "C" fn jsonnet_json_destroy(_vm: &VM, v: Box<Val>) {
 	drop(v);
 }
 
 /// Set the number of lines of stack trace to display (0 for all of them).
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn jsonnet_max_trace(vm: &mut VM, v: c_uint) {
 	if let Some(format) = vm.trace_format.as_any_mut().downcast_mut::<CompactFormat>() {
 		format.max_trace = v as usize;
@@ -237,7 +237,7 @@ pub extern "C" fn jsonnet_max_trace(vm: &mut VM, v: c_uint) {
 /// # Safety
 ///
 /// `filename` should be a NUL-terminated string
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn jsonnet_evaluate_file(
 	vm: &VM,
 	filename: *const c_char,
@@ -270,7 +270,7 @@ pub unsafe extern "C" fn jsonnet_evaluate_file(
 /// # Safety
 ///
 /// `filename`, `snippet` should be a NUL-terminated strings
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn jsonnet_evaluate_snippet(
 	vm: &VM,
 	filename: *const c_char,
@@ -330,7 +330,7 @@ fn multi_to_raw(multi: Vec<(IStr, IStr)>) -> *const c_char {
 }
 
 /// # Safety
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn jsonnet_evaluate_file_multi(
 	vm: &VM,
 	filename: *const c_char,
@@ -357,7 +357,7 @@ pub unsafe extern "C" fn jsonnet_evaluate_file_multi(
 }
 
 /// # Safety
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn jsonnet_evaluate_snippet_multi(
 	vm: &VM,
 	filename: *const c_char,
@@ -412,7 +412,7 @@ fn stream_to_raw(multi: Vec<IStr>) -> *const c_char {
 }
 
 /// # Safety
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn jsonnet_evaluate_file_stream(
 	vm: &VM,
 	filename: *const c_char,
@@ -439,7 +439,7 @@ pub unsafe extern "C" fn jsonnet_evaluate_file_stream(
 }
 
 /// # Safety
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn jsonnet_evaluate_snippet_stream(
 	vm: &VM,
 	filename: *const c_char,
