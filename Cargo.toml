@@ -1,6 +1,13 @@
 [workspace]
-members = ["crates/*", "bindings/jsonnet", "cmds/*", "tests", "xtask"]
-default-members = ["cmds/jrsonnet"]
+members = [
+  "crates/*",
+  "bindings/jrsonnet-web",
+  "bindings/jsonnet",
+  "cmds/*",
+  "tests",
+  "xtask",
+]
+default-members = ["cmds/jrsonnet", "cmds/jrsonnet-fmt", "bindings/jsonnet"]
 resolver = "2"
 
 [workspace.package]
@@ -22,6 +29,7 @@ jrsonnet-stdlib = { path = "./crates/jrsonnet-stdlib", version = "0.5.0-pre98" }
 jrsonnet-cli = { path = "./crates/jrsonnet-cli", version = "0.5.0-pre98" }
 jrsonnet-types = { path = "./crates/jrsonnet-types", version = "0.5.0-pre98" }
 jrsonnet-formatter = { path = "./crates/jrsonnet-formatter", version = "0.5.0-pre98" }
+jrsonnet-lexer = { path = "./crates/jrsonnet-lexer", version = "0.5.0-pre98" }
 jrsonnet-gcmodule = { version = "0.4.5" }
 # Diagnostics.
 # hi-doc is my library, which handles text formatting very well, but isn't polished enough yet
@@ -30,8 +38,7 @@ jrsonnet-gcmodule = { version = "0.4.5" }
 # I'm against using miette, because I want to reuse data between interpreter and annotations, yet miette
 #   and other libraries want to handle spans etc by itself, which is okay for compiler diagnostics, but is
 #   bad for interpreter, where interpreter and parser are paired much closer.
-hi-doc = "0.3.0"
-annotate-snippets = "0.12.11"
+hi-doc = { version = "0.3.0", default-features = false }
 
 # CLI
 clap = "4.5"
@@ -50,6 +57,13 @@ thiserror = "2.0.18"
 
 # Code formatting
 dprint-core = "0.67.4"
+
+# Evaluator
+stacker = "0.1.23"
+smallvec = "1.15.1"
+educe = { version = "0.6.0", default-features = false }
+url = "2.5.8"
+rustversion = "1.0.22"
 
 # Stdlib hashing functions
 md5 = "0.8.0"
@@ -92,6 +106,14 @@ syn-dissect-closure = "0.1.0"
 # Tests/benchmarks
 insta = { version = "1.46", features = ["glob"] }
 criterion = { version = "0.8" }
+strip-ansi-escapes = "0.2.1"
+
+# Web
+wasm-bindgen = "=0.2.106"
+wasm-bindgen-futures = "0.4.56"
+js-sys = "0.3.83"
+console_error_panic_hook = "0.1"
+getrandom = "0.3.4"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
@@ -149,6 +171,9 @@ similar_names = "allow"
 
 #[profile.test]
 #opt-level = 1
+
+[patch.crates-io]
+jrsonnet-gcmodule = { path = "/home/lach/build/gcmodule" }
 
 [profile.release]
 opt-level = 3

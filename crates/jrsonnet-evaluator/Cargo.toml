@@ -13,9 +13,9 @@ build = "build.rs"
 workspace = true
 
 [features]
-default = ["explaining-traces", "ir-parser"]
+default = ["explaining-traces", "ir-parser", "wasm-bindgen"]
 # Rustc-like trace visualization
-explaining-traces = ["annotate-snippets", "hi-doc"]
+explaining-traces = ["hi-doc"]
 # Allows library authors to throw custom errors
 anyhow-error = ["anyhow"]
 # Use hand-written recursive descent parser
@@ -39,6 +39,7 @@ exp-null-coaelse = [
   "jrsonnet-peg-parser?/exp-null-coaelse",
   "jrsonnet-ir-parser?/exp-null-coaelse",
 ]
+wasm-bindgen = ["dep:wasm-bindgen"]
 
 [dependencies]
 jrsonnet-interner.workspace = true
@@ -61,27 +62,26 @@ strsim.workspace = true
 serde.workspace = true
 
 anyhow = { workspace = true, optional = true }
-# Explaining traces
-annotate-snippets = { workspace = true, optional = true }
 # Better explaining traces
 hi-doc = { workspace = true, optional = true }
 # Bigint
 num-bigint = { workspace = true, features = ["serde"], optional = true }
 
-stacker = "0.1.23"
-educe = { version = "0.6.0", default-features = false, features = [
+stacker.workspace = true
+educe = { workspace = true, features = [
   "Clone",
   "Debug",
   "Eq",
   "Hash",
   "PartialEq",
 ] }
-smallvec = "1.15.1"
+smallvec.workspace = true
 drop_bomb.workspace = true
+wasm-bindgen = { workspace = true, optional = true }
 
 [build-dependencies]
-rustversion = "1.0.22"
+rustversion.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
-strip-ansi-escapes = "0.2.1"
+strip-ansi-escapes.workspace = true
