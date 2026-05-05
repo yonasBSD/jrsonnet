@@ -220,10 +220,7 @@ fn parse_number(p: &mut Parser<'_>) -> Result<NumValue> {
 
 fn ident(p: &mut Parser<'_>) -> Result<IStr> {
 	if !p.at(SyntaxKind::IDENT) {
-		return Err(p.error(format!(
-			"expected identifier, got {}",
-			p.current_desc()
-		)));
+		return Err(p.error(format!("expected identifier, got {}", p.current_desc())));
 	}
 	let text = p.text();
 	p.eat_any();

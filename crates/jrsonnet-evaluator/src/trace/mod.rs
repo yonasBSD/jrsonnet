@@ -82,18 +82,24 @@ fn print_code_location(
 ) -> Result<(), std::fmt::Error> {
 	if start.line == end.line {
 		if start.column == end.column {
-			write!(out, "{}:{}", start.line, end.column.saturating_sub(1))?;
+			write!(out, "{}:{}", start.line, start.column)?;
 		} else {
-			write!(out, "{}:{}-{}", start.line, start.column - 1, end.column)?;
+			write!(
+				out,
+				"{}:{}-{}",
+				start.line,
+				start.column,
+				end.column.saturating_sub(1)
+			)?;
 		}
 	} else {
 		write!(
 			out,
 			"{}:{}-{}:{}",
 			start.line,
-			end.column.saturating_sub(1),
-			start.line,
-			end.column
+			start.column,
+			end.line,
+			end.column.saturating_sub(1)
 		)?;
 	}
 	Ok(())
@@ -131,22 +137,13 @@ impl TraceFormat for CompactFormat {
 				|| path.source_path().to_string(),
 				|r| self.resolver.resolve(r),
 			);
-			let mut offset = error.location.1 as usize;
-			let is_eof = if offset >= path.code().len() {
-				offset = path.code().len().saturating_sub(1);
-				true
-			} else {
-				false
-			};
+			let offset = (error.location.1 as usize).min(path.code().len());
 			#[expect(clippy::cast_possible_truncation, reason = "code is limited by 4gb")]
-			let mut location = path
+			let location = path
 				.map_source_locations(&[offset as u32])
 				.into_iter()
 				.next()
 				.unwrap();
-			if is_eof {
-				location.column += 1;
-			}
 
 			write!(n, ":").unwrap();
 			print_code_location(&mut n, &location, &location).unwrap();

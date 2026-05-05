@@ -895,9 +895,15 @@ impl Printable for SourceFile {
 	}
 }
 
+#[derive(Default)]
 pub struct FormatOptions {
 	// 0 for hard tabs, otherwise number of spaces
 	pub indent: u8,
+}
+impl FormatOptions {
+	pub fn new() -> Self {
+		Self::default()
+	}
 }
 
 #[allow(
