@@ -1,10 +1,8 @@
 use anyhow::Result;
-#[cfg(not(target_os = "linux"))]
-use anyhow::bail;
 use clap::Parser;
 use xshell::{Shell, cmd};
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 mod bench;
 mod sourcegen;
 
@@ -40,6 +38,7 @@ enum Opts {
 		args: Vec<String>,
 	},
 	/// Benchmark a command: repeated runs, reports time + RSS stats (Linux only)
+	#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 	Bench {
 		#[arg(long, default_value_t = 10)]
 		runs: u32,
@@ -121,7 +120,7 @@ fn main() -> Result<()> {
 
 			Ok(())
 		}
-		#[cfg(target_os = "linux")]
+		#[cfg(all(target_arch = "x86_64", target_os = "linux"))]
 		Opts::Bench {
 			runs,
 			warmup,
