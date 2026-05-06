@@ -70,7 +70,7 @@
           targetArch = pkgs.stdenv.hostPlatform.parsed.cpu.name;
           rustfmt = (pkgs.fenix.complete or pkgs.fenix.stable).rustfmt;
           toolchain = pkgs.fenix.combine [
-            (pkgs.fenix.complete.withComponents [
+            ((pkgs.fenix.complete or pkgs.fenix.stable).withComponents [
               "cargo"
               "clippy"
               "rustc"

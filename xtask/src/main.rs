@@ -1,8 +1,8 @@
+use anyhow::Result;
 #[cfg(not(target_os = "linux"))]
 use anyhow::bail;
-use anyhow::Result;
 use clap::Parser;
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 #[cfg(target_os = "linux")]
 mod bench;
