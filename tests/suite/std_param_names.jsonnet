@@ -189,6 +189,14 @@ local names = {
     objectValues+: ['preserve_order'],
     objectValuesAll+: ['preserve_order'],
     prune+: ['preserve_order'],
+} else {}) + (if test.expBigint then {
+    bigint: ['v'],
+} else {}) + (if test.expRegexp then {
+    regexFullMatch: ['pattern', 'str'],
+    regexGlobalReplace: ['str', 'pattern', 'to'],
+    regexPartialMatch: ['pattern', 'str'],
+    regexQuoteMeta: ['pattern'],
+    regexReplace: ['str', 'pattern', 'to'],
 } else {});
 
 std.all(std.map(function(key) assertNames(key, names[key]), std.objectFields(names)))

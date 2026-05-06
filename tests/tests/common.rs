@@ -73,6 +73,8 @@ impl ContextInitializerT for ContextInitializer {
 		bobj.method("paramNames", param_names {});
 		bobj.field("expPreserveOrder")
 			.value(cfg!(feature = "exp-preserve-order"));
+		bobj.field("expBigint").value(cfg!(feature = "exp-bigint"));
+		bobj.field("expRegexp").value(cfg!(feature = "exp-regex"));
 
 		builder.bind("test", Thunk::evaluated(Val::Obj(bobj.build())));
 	}
