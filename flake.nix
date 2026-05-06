@@ -70,6 +70,15 @@
           targetArch = pkgs.stdenv.hostPlatform.parsed.cpu.name;
           rustfmt = (pkgs.fenix.complete or pkgs.fenix.stable).rustfmt;
           toolchain = pkgs.fenix.combine [
+            (pkgs.fenix.stable.withComponents [
+              "cargo"
+              "clippy"
+              "rustc"
+              "rustfmt"
+            ])
+            pkgs.fenix.targets.wasm32-unknown-unknown.stable.rust-std
+          ];
+          devToolchain = pkgs.fenix.combine [
             ((pkgs.fenix.complete or pkgs.fenix.stable).withComponents [
               "cargo"
               "clippy"
@@ -81,6 +90,7 @@
             pkgs.fenix.targets.wasm32-unknown-unknown.latest.rust-std
           ];
           craneLib = (inputs.crane.mkLib pkgs).overrideToolchain toolchain;
+          craneLibDev = (inputs.crane.mkLib pkgs).overrideToolchain devToolchain;
           treefmt =
             (inputs.treefmt-nix.lib.evalModule pkgs (import ./treefmt.nix { inherit rustfmt; })).config.build;
 
@@ -263,7 +273,7 @@
           };
           formatter = mkIf (system != "armv7l-linux") treefmt.wrapper;
           shelly.shells.default = {
-            factory = craneLib.devShell;
+            factory = craneLibDev.devShell;
             packages =
               with pkgs;
               [
