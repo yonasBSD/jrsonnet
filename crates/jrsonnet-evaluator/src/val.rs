@@ -616,6 +616,11 @@ impl From<ObjValue> for Val {
 		Self::Obj(value)
 	}
 }
+impl From<bool> for Val {
+	fn from(value: bool) -> Self {
+		Self::Bool(value)
+	}
+}
 
 const fn is_function_like(val: &Val) -> bool {
 	matches!(val, Val::Func(_))

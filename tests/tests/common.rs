@@ -71,6 +71,8 @@ impl ContextInitializerT for ContextInitializer {
 		let mut bobj = ObjValueBuilder::new();
 		bobj.method("assertThrow", assert_throw {});
 		bobj.method("paramNames", param_names {});
+		bobj.field("expPreserveOrder")
+			.value(cfg!(feature = "exp-preserve-order"));
 
 		builder.bind("test", Thunk::evaluated(Val::Obj(bobj.build())));
 	}
