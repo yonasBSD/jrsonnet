@@ -1,14 +1,13 @@
 use std::rc::Rc;
 
+#[cfg(feature = "exp-object-iteration")]
+use jrsonnet_interner::IStr;
 use jrsonnet_types::ValType;
 
 use super::{
 	destructure::{destruct, evaluate_locals_unbound, fill_letrec_binds},
 	evaluate_field_member_static, evaluate_field_member_unbound,
 };
-#[cfg(feature = "exp-object-iteration")]
-use jrsonnet_interner::IStr;
-
 use crate::{
 	Context, ObjValue, ObjValueBuilder, Result, Thunk, Val,
 	analyze::{

@@ -430,17 +430,17 @@ impl SupThis {
 	/// Exists when super appears outside of `super.field`/`"field" in super` expressions
 	/// Exclusive to jrsonnet.
 	///
-	/// Might return `NoSuperFound` error.
-	pub fn standalone_super(&self) -> Result<ObjValue> {
+	/// Returns None if no `super` found
+	pub fn standalone_super(&self) -> Option<ObjValue> {
 		if !self.sup.super_exists() {
-			bail!(NoSuperFound)
+			return None;
 		}
 		let mut out = ObjValue::builder();
 		out.extend_with_core(StandaloneSuperCore {
 			sup: self.sup,
 			this: self.this.clone(),
 		});
-		Ok(out.build())
+		Some(out.build())
 	}
 	pub fn this(&self) -> &ObjValue {
 		&self.this

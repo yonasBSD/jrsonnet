@@ -236,7 +236,7 @@ pub fn evaluate(ctx: Context, expr: &LExpr) -> Result<Val> {
 				.transpose()?;
 			Val::from(indexable.slice(start, end, step)?)
 		}
-		LExpr::Super => Val::Obj(ctx.try_sup_this()?.standalone_super()?),
+		LExpr::Super => Val::Obj(ctx.try_sup_this()?.standalone_super().ok_or(NoSuperFound)?),
 		LExpr::Import {
 			kind,
 			kind_span,
@@ -337,108 +337,128 @@ fn evaluate_apply(
 }
 
 fn evaluate_index(ctx: Context, indexable: &LExpr, parts: &[LIndexPart]) -> Result<Val> {
-	let mut value = if matches!(indexable, LExpr::Super) {
+	let mut parts = parts.iter();
+	let mut indexable = if matches!(indexable, LExpr::Super) {
+		let part = parts.next().expect("at least part should exist");
+		// sup_this existence check might also be skipped here for null-coalesce...
+		// But I believe this might cause errors.
 		let sup_this = ctx.try_sup_this()?;
-		// First part must be evaluated to get the super field name
-		if parts.is_empty() {
-			bail!(RuntimeError("super requires an index".into()))
+
+		if !sup_this.has_super() {
+			#[cfg(feature = "exp-null-coaelse")]
+			if part.null_coaelse {
+				return Ok(Val::Null);
+			}
+			bail!(NoSuperFound);
 		}
-		let key_val = evaluate(ctx.clone(), &parts[0].value)?;
-		let Val::Str(key) = &key_val else {
+		let name = evaluate(ctx.clone(), &part.value)?;
+
+		let Val::Str(name) = name else {
 			bail!(ValueIndexMustBeTypeGot(
 				ValType::Obj,
 				ValType::Str,
-				key_val.value_type(),
+				name.value_type(),
 			))
 		};
-		let field = key.clone().into_flat();
-		if let Some(v) = sup_this.get_super(field.clone())? {
-			// Continue with remaining parts
-			let mut value = v;
-			for part in &parts[1..] {
-				value = index_val(ctx.clone(), CallLocation::new(&part.span), value, part)?;
+
+		let name = name.into_flat();
+		match sup_this
+			.get_super(name.clone())
+			.with_description_src(&part.span, || format!("super field <{name}> access"))?
+		{
+			Some(v) => v,
+			#[cfg(feature = "exp-null-coaelse")]
+			None if part.null_coaelse => return Ok(Val::Null),
+			None => {
+				let suggestions = suggest_object_fields(
+					&sup_this.standalone_super().expect("super exists"),
+					name.clone(),
+				);
+				bail!(NoSuchField(name, suggestions))
 			}
-			return Ok(value);
 		}
-		let suggestions = suggest_object_fields(sup_this.this(), field.clone());
-		bail!(NoSuchField(field, suggestions))
 	} else {
 		evaluate(ctx.clone(), indexable)?
 	};
 
 	for part in parts {
-		value = index_val(ctx.clone(), CallLocation::new(&part.span), value, part)?;
+		let ctx = ctx.clone();
+		let loc = CallLocation::new(&part.span);
+		let value = indexable;
+		let key_val = evaluate(ctx, &part.value)?;
+		indexable = match (&value, &key_val) {
+			(Val::Obj(obj), Val::Str(key)) => {
+				let key = key.clone().into_flat();
+				match obj
+					.get(key.clone())
+					.with_description_src(loc, || format!("field <{key}> access"))?
+				{
+					Some(v) => v,
+					#[cfg(feature = "exp-null-coaelse")]
+					None if part.null_coaelse => return Ok(Val::Null),
+					None => {
+						return Err(Error::from(NoSuchField(
+							key.clone(),
+							suggest_object_fields(obj, key.clone()),
+						)))
+						.with_description_src(loc, || format!("field <{key}> access"));
+					}
+				}
+			}
+			(Val::Arr(arr), Val::Num(idx)) => {
+				let n = idx.get();
+				if n.fract() > f64::EPSILON {
+					bail!(FractionalIndex)
+				}
+				if n < 0.0 {
+					bail!(ArrayBoundsError(
+						n as isize, // truncation is fine for error display
+						arr.len()
+					));
+				}
+				#[expect(
+					clippy::cast_possible_truncation,
+					clippy::cast_sign_loss,
+					reason = "n is checked positive"
+				)]
+				let i = n as u32;
+				arr.get(i)
+					.with_description_src(loc, || format!("element <{i}> access"))?
+					.ok_or_else(|| ArrayBoundsError(i as isize, arr.len()))?
+			}
+			(Val::Str(s), Val::Num(idx)) => {
+				let n = idx.get();
+				if n.fract() > f64::EPSILON {
+					bail!(FractionalIndex)
+				}
+				let flat = s.clone().into_flat();
+				if n < 0.0 {
+					bail!(ArrayBoundsError(
+						n as isize, // truncation is fine for error display
+						flat.chars().count() as u32
+					));
+				}
+				#[expect(
+					clippy::cast_possible_truncation,
+					clippy::cast_sign_loss,
+					reason = "n is checked positive, overflow will truncate as expected"
+				)]
+				let i = n as usize;
+				let Some(char) = flat.chars().nth(i) else {
+					bail!(StringBoundsError(i, flat.chars().count()))
+				};
+				Val::string(char)
+			}
+			#[cfg(feature = "exp-null-coaelse")]
+			(Val::Null, _) if part.null_coaelse => return Ok(Val::Null),
+			_ => bail!(ValueIndexMustBeTypeGot(
+				value.value_type(),
+				ValType::Str,
+				key_val.value_type()
+			)),
+		};
 	}
-	Ok(value)
-}
-
-fn index_val(ctx: Context, loc: CallLocation<'_>, value: Val, part: &LIndexPart) -> Result<Val> {
-	let key_val = evaluate(ctx, &part.value)?;
-	Ok(match (&value, &key_val) {
-		(Val::Obj(obj), Val::Str(key)) => {
-			let field = key.clone().into_flat();
-			if let Some(v) = obj
-				.get(field.clone())
-				.with_description_src(loc, || format!("field <{field}> access"))?
-			{
-				v
-			} else {
-				bail!(NoSuchField(
-					field.clone(),
-					suggest_object_fields(obj, field)
-				))
-			}
-		}
-		(Val::Arr(arr), Val::Num(idx)) => {
-			let n = idx.get();
-			if n.fract() > f64::EPSILON {
-				bail!(FractionalIndex)
-			}
-			if n < 0.0 {
-				bail!(ArrayBoundsError(
-					n as isize, // truncation is fine for error display
-					arr.len()
-				));
-			}
-			#[expect(
-				clippy::cast_possible_truncation,
-				clippy::cast_sign_loss,
-				reason = "n is checked positive"
-			)]
-			let i = n as u32;
-			arr.get(i)
-				.with_description_src(loc, || format!("element <{i}> access"))?
-				.ok_or_else(|| ArrayBoundsError(i as isize, arr.len()))?
-		}
-		(Val::Str(s), Val::Num(idx)) => {
-			let n = idx.get();
-			if n.fract() > f64::EPSILON {
-				bail!(FractionalIndex)
-			}
-			let flat = s.clone().into_flat();
-			if n < 0.0 {
-				bail!(ArrayBoundsError(
-					n as isize, // truncation is fine for error display
-					flat.chars().count() as u32
-				));
-			}
-			#[expect(
-				clippy::cast_possible_truncation,
-				clippy::cast_sign_loss,
-				reason = "n is checked positive, overflow will truncate as expected"
-			)]
-			let i = n as usize;
-			let Some(char) = flat.chars().nth(i) else {
-				bail!(StringBoundsError(i, flat.chars().count()))
-			};
-			Val::string(char)
-		}
-		_ => bail!(ValueIndexMustBeTypeGot(
-			value.value_type(),
-			ValType::Str,
-			key_val.value_type()
-		)),
-	})
+	Ok(indexable)
 }
 
 fn evaluate_obj_body(super_obj: Option<ObjValue>, ctx: Context, body: &LObjBody) -> Result<Val> {
