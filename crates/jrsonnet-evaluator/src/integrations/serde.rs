@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
-use jrsonnet_interner::IStr;
+use jrsonnet_interner::{IBytes, IStr};
+use jrsonnet_ir::NumValue;
 use serde::{
 	Deserialize, Serialize, Serializer,
 	de::{self, Visitor},
@@ -11,8 +12,7 @@ use serde::{
 };
 
 use crate::{
-	Error as JrError, ObjValue, ObjValueBuilder, Result, Val, arr::ArrValue, in_description_frame,
-	runtime_error, val::NumValue,
+	Error as JrError, ObjValue, ObjValueBuilder, Result, Val, error, in_description_frame,
 };
 
 impl<'de> Deserialize<'de> for Val {
@@ -90,7 +90,7 @@ impl<'de> Deserialize<'de> for Val {
 			where
 				E: de::Error,
 			{
-				Ok(Val::Arr(ArrValue::bytes(v.into())))
+				Ok(Val::arr(IBytes::from(v)))
 			}
 
 			fn visit_none<E>(self) -> Result<Self::Value, E>
@@ -130,7 +130,7 @@ impl<'de> Deserialize<'de> for Val {
 					out.push(val);
 				}
 
-				Ok(Val::Arr(ArrValue::eager(out)))
+				Ok(Val::arr(out))
 			}
 
 			fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
@@ -182,7 +182,7 @@ impl Serialize for Val {
 			#[cfg(feature = "exp-bigint")]
 			Self::BigInt(b) => b.serialize(serializer),
 			Self::Arr(arr) => {
-				let mut seq = serializer.serialize_seq(Some(arr.len()))?;
+				let mut seq = serializer.serialize_seq(Some(arr.len() as usize))?;
 				for (i, element) in arr.iter().enumerate() {
 					let mut serde_error = None;
 					in_description_frame(
@@ -203,7 +203,7 @@ impl Serialize for Val {
 				seq.end()
 			}
 			Self::Obj(obj) => {
-				let mut map = serializer.serialize_map(Some(obj.len()))?;
+				let mut map = serializer.serialize_map(Some(obj.len() as usize))?;
 				for (field, value) in obj.iter(
 					#[cfg(feature = "exp-preserve-order")]
 					true,
@@ -270,7 +270,7 @@ impl SerializeSeq for IntoVecValSerializer {
 	}
 
 	fn end(self) -> Result<Val> {
-		let inner = Val::Arr(ArrValue::eager(self.data));
+		let inner = Val::arr(self.data);
 		if let Some(variant) = self.variant {
 			let mut out = ObjValue::builder_with_capacity(1);
 			out.field(variant).value(inner);
@@ -509,7 +509,7 @@ impl Serializer for IntoValSerializer {
 	}
 
 	fn serialize_bytes(self, v: &[u8]) -> Result<Val> {
-		Ok(Val::Arr(ArrValue::bytes(v.into())))
+		Ok(Val::arr(IBytes::from(v)))
 	}
 
 	fn serialize_none(self) -> Result<Val> {
@@ -629,6 +629,6 @@ impl serde::ser::Error for JrError {
 	where
 		T: std::fmt::Display,
 	{
-		runtime_error!("serde: {msg}")
+		error!("serde: {msg}")
 	}
 }

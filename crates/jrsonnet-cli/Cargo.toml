@@ -1,6 +1,8 @@
 [package]
 name = "jrsonnet-cli"
-description = "Utilities for building jrsonnet CLIs"
+description = "Reusable clap-based building blocks for jrsonnet command-line tools"
+keywords = ["jsonnet", "cli", "clap"]
+categories = ["command-line-interface"]
 authors.workspace = true
 edition.workspace = true
 license.workspace = true

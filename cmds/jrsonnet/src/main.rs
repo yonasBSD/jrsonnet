@@ -200,7 +200,7 @@ fn main_real(opts: Opts) -> Result<(), Error> {
 		val = s.evaluate_snippet_with(
 			"<exp_apply>".to_owned(),
 			&apply,
-			InitialUnderscore(Thunk::evaluated(val)),
+			&InitialUnderscore(Thunk::evaluated(val)),
 		)?;
 	}
 
@@ -238,7 +238,7 @@ fn main_real(opts: Opts) -> Result<(), Error> {
 				data.manifest(&manifest_format)
 					.with_description(|| format!("manifesting {field}"))?,
 			)?;
-			if manifest_format.file_trailing_newline() {
+			if !opts.manifest.no_trailing_newline {
 				writeln!(file)?;
 			}
 			file.flush()?;

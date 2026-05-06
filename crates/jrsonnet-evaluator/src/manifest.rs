@@ -1,6 +1,8 @@
-use std::{borrow::Cow, fmt::Write, ptr};
+use std::{borrow::Cow, fmt::Write, hint::black_box, ptr};
 
-use crate::{Result, ResultExt, Val, bail, in_description_frame};
+use crate::{
+	Error, Result, ResultExt, Val, bail, evaluate::ensure_sufficient_stack, in_description_frame,
+};
 
 pub trait ManifestFormat {
 	fn manifest_buf(&self, val: Val, buf: &mut String) -> Result<()>;
@@ -8,13 +10,6 @@ pub trait ManifestFormat {
 		let mut out = String::new();
 		self.manifest_buf(val, &mut out)?;
 		Ok(out)
-	}
-	/// When outputing to file, is it safe to append a trailing newline (I.e newline won't change
-	/// the meaning).
-	///
-	/// Default implementation returns `true`
-	fn file_trailing_newline(&self) -> bool {
-		true
 	}
 }
 impl<T> ManifestFormat for Box<T>
@@ -25,10 +20,6 @@ where
 		let inner = &**self;
 		inner.manifest_buf(val, buf)
 	}
-	fn file_trailing_newline(&self) -> bool {
-		let inner = &**self;
-		inner.file_trailing_newline()
-	}
 }
 impl<T> ManifestFormat for &'_ T
 where
@@ -38,9 +29,51 @@ where
 		let inner = &**self;
 		inner.manifest_buf(val, buf)
 	}
-	fn file_trailing_newline(&self) -> bool {
-		let inner = &**self;
-		inner.file_trailing_newline()
+}
+
+pub struct BlackBoxFormat;
+impl ManifestFormat for BlackBoxFormat {
+	#[allow(clippy::only_used_in_recursion)]
+	fn manifest_buf(&self, val: Val, buf: &mut String) -> Result<()> {
+		match val {
+			Val::Bool(v) => {
+				black_box(v);
+			}
+			val @ Val::Null => {
+				black_box(val);
+			}
+			Val::Str(str_value) => {
+				black_box(format!("{str_value}"));
+			}
+			Val::Num(num_value) => {
+				black_box(num_value);
+			}
+			Val::Arr(arr_value) => {
+				for ele in arr_value.iter() {
+					let ele = ele?;
+					self.manifest_buf(ele, buf)?;
+				}
+			}
+			Val::Obj(obj_value) => {
+				for (name, value) in obj_value.iter(
+					#[cfg(feature = "exp-preserve-order")]
+					true,
+				) {
+					black_box(name);
+					let value = value?;
+					self.manifest_buf(value, buf)?;
+				}
+			}
+			Val::Func(func_val) => {
+				black_box(func_val);
+				bail!("tried to manifest function")
+			}
+			#[cfg(feature = "exp-bigint")]
+			Val::BigInt(n) => {
+				black_box(n);
+			}
+		}
+		Ok(())
 	}
 }
 
@@ -66,7 +99,6 @@ pub struct JsonFormat<'s> {
 	preserve_order: bool,
 	#[cfg(feature = "exp-bigint")]
 	preserve_bigints: bool,
-	debug_truncate_strings: Option<usize>,
 }
 
 impl<'s> JsonFormat<'s> {
@@ -81,7 +113,6 @@ impl<'s> JsonFormat<'s> {
 			preserve_order,
 			#[cfg(feature = "exp-bigint")]
 			preserve_bigints: false,
-			debug_truncate_strings: None,
 		}
 	}
 	/// Same format as std.toString, except does not keeps top-level string as-is
@@ -96,7 +127,6 @@ impl<'s> JsonFormat<'s> {
 			preserve_order: false,
 			#[cfg(feature = "exp-bigint")]
 			preserve_bigints: false,
-			debug_truncate_strings: None,
 		}
 	}
 	pub fn std_to_json(
@@ -114,7 +144,6 @@ impl<'s> JsonFormat<'s> {
 			preserve_order,
 			#[cfg(feature = "exp-bigint")]
 			preserve_bigints: false,
-			debug_truncate_strings: None,
 		}
 	}
 	// Same format as CLI manifestification
@@ -137,7 +166,6 @@ impl<'s> JsonFormat<'s> {
 			preserve_order,
 			#[cfg(feature = "exp-bigint")]
 			preserve_bigints: false,
-			debug_truncate_strings: None,
 		}
 	}
 	// Same format as CLI manifestification
@@ -151,7 +179,6 @@ impl<'s> JsonFormat<'s> {
 			preserve_order: true,
 			#[cfg(feature = "exp-bigint")]
 			preserve_bigints: true,
-			debug_truncate_strings: Some(256),
 		}
 	}
 }
@@ -166,7 +193,6 @@ impl Default for JsonFormat<'static> {
 			preserve_order: false,
 			#[cfg(feature = "exp-bigint")]
 			preserve_bigints: false,
-			debug_truncate_strings: None,
 		}
 	}
 }
@@ -197,18 +223,12 @@ fn manifest_json_ex_buf(
 		}
 		Val::Null => buf.push_str("null"),
 		Val::Str(s) => {
-			let flat = s.clone().into_flat();
-			if let Some(truncate) = options.debug_truncate_strings {
-				if flat.len() > truncate {
-					let (start, end) = flat.split_at(truncate / 2);
-					let (_, end) = end.split_at(end.len() - truncate / 2);
-					escape_string_json_buf(&format!("{start}..{end}"), buf);
-				} else {
-					escape_string_json_buf(&flat, buf);
-				}
-			} else {
-				escape_string_json_buf(&flat, buf);
-			}
+			buf.reserve(2 + s.len());
+			buf.push('"');
+			s.chunks(&mut |c| {
+				escape_string_json_buf_raw(c, buf);
+			});
+			buf.push('"');
 		}
 		Val::Num(n) => write!(buf, "{n}").unwrap(),
 		#[cfg(feature = "exp-bigint")]
@@ -219,7 +239,7 @@ fn manifest_json_ex_buf(
 				write!(buf, "{:?}", n.to_string()).unwrap();
 			}
 		}
-		Val::Arr(items) => {
+		Val::Arr(items) => ensure_sufficient_stack(|| {
 			buf.push('[');
 
 			let old_len = cur_padding.len();
@@ -271,8 +291,9 @@ fn manifest_json_ex_buf(
 			}
 
 			buf.push(']');
-		}
-		Val::Obj(obj) => {
+			Ok::<_, Error>(())
+		})?,
+		Val::Obj(obj) => ensure_sufficient_stack(|| {
 			obj.run_assertions()?;
 			buf.push('{');
 
@@ -333,7 +354,8 @@ fn manifest_json_ex_buf(
 			}
 
 			buf.push('}');
-		}
+			Ok::<_, Error>(())
+		})?,
 		Val::Func(_) => bail!("tried to manifest function"),
 	}
 	Ok(())
@@ -362,9 +384,6 @@ impl ManifestFormat for ToStringFormat {
 		}
 		JSON_TO_STRING.manifest_buf(val, out)
 	}
-	fn file_trailing_newline(&self) -> bool {
-		false
-	}
 }
 pub struct StringFormat;
 impl ManifestFormat for StringFormat {
@@ -377,9 +396,6 @@ impl ManifestFormat for StringFormat {
 		};
 		write!(out, "{s}").unwrap();
 		Ok(())
-	}
-	fn file_trailing_newline(&self) -> bool {
-		false
 	}
 }
 
@@ -476,14 +492,16 @@ static ESCAPE: [u8; 256] = [
 ];
 
 pub fn escape_string_json_buf(value: &str, buf: &mut String) {
+	buf.reserve_exact(value.len() + 2);
+	buf.push('"');
+	escape_string_json_buf_raw(value, buf);
+	buf.push('"');
+}
+
+fn escape_string_json_buf_raw(value: &str, buf: &mut String) {
 	// Safety: we only write correct utf-8 in this function
 	let buf: &mut Vec<u8> = unsafe { &mut *ptr::from_mut(buf).cast::<Vec<u8>>() };
 	let bytes = value.as_bytes();
-
-	// Perfect for ascii strings, removes any reallocations
-	buf.reserve(value.len() + 2);
-
-	buf.push(b'"');
 
 	let mut start = 0;
 
@@ -519,10 +537,8 @@ pub fn escape_string_json_buf(value: &str, buf: &mut String) {
 	}
 
 	if start == bytes.len() {
-		buf.push(b'"');
 		return;
 	}
 
 	buf.extend_from_slice(&bytes[start..]);
-	buf.push(b'"');
 }

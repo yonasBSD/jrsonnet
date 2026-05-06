@@ -19,8 +19,17 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    crane.url = "github:CertainLach/crane/refactor/drop-remarshal";
+    crane.url = "github:ipetkov/crane";
     shelly.url = "github:CertainLach/shelly";
+
+    cpp-jsonnet-for-tests = {
+      url = "github:google/jsonnet";
+      flake = false;
+    };
+    go-jsonnet-for-tests = {
+      url = "github:google/go-jsonnet";
+      flake = false;
+    };
   };
   outputs =
     inputs:
@@ -61,14 +70,15 @@
           targetArch = pkgs.stdenv.hostPlatform.parsed.cpu.name;
           rustfmt = (pkgs.fenix.complete or pkgs.fenix.stable).rustfmt;
           toolchain = pkgs.fenix.combine [
-            (pkgs.fenix.stable.withComponents [
+            ((pkgs.fenix.complete or pkgs.fenix.stable).withComponents [
               "cargo"
               "clippy"
               "rustc"
               "rust-src"
+              "rustfmt"
               "rust-analyzer"
             ])
-            rustfmt
+            pkgs.fenix.targets.wasm32-unknown-unknown.latest.rust-std
           ];
           craneLib = (inputs.crane.mkLib pkgs).overrideToolchain toolchain;
           treefmt =
@@ -236,9 +246,11 @@
             let
               jrsonnet = pkgs.callPackage ./nix/jrsonnet.nix {
                 inherit craneLib;
+                inherit (inputs) cpp-jsonnet-for-tests go-jsonnet-for-tests;
               };
               jrsonnet-experimental = pkgs.callPackage ./nix/jrsonnet.nix {
                 inherit craneLib;
+                inherit (inputs) cpp-jsonnet-for-tests go-jsonnet-for-tests;
                 withExperimentalFeatures = true;
               };
             in
@@ -270,6 +282,22 @@
                 kdePackages.kcachegrind
                 samply
               ];
+            environment = {
+              CPP_JSONNET_FOR_TESTS = inputs.cpp-jsonnet-for-tests;
+              GO_JSONNET_FOR_TESTS = inputs.go-jsonnet-for-tests;
+            };
+          };
+          shelly.shells.impls = {
+            packages =
+              (with self'.legacyPackages.jsonnetImpls; [
+                cpp-jsonnet
+                go-jsonnet
+                rsjsonnet
+                sjsonnet
+              ])
+              ++ (with self'.packages; [
+                jrsonnet
+              ]);
           };
         };
       hercules-ci.github-releases.files =
@@ -349,6 +377,8 @@
       hercules-ci.cargo-publish = {
         enable = true;
         secretName = "crates-io";
+        extraPublishArgs = [ "--workspace" ];
+        assertVersions = true;
       };
       hercules-ci.flake-update = {
         enable = true;

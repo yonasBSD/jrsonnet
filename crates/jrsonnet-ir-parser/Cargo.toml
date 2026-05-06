@@ -1,6 +1,8 @@
 [package]
 name = "jrsonnet-ir-parser"
-description = "Jrsonnet hand-rolled parser which parses source directly into IR"
+description = "Hand-rolled recursive-descent parser that produces jrsonnet IR directly"
+keywords = ["jsonnet", "parser"]
+categories = ["parser-implementations"]
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,7 +17,7 @@ exp-destruct = ["jrsonnet-ir/exp-destruct"]
 insta.workspace = true
 jrsonnet-gcmodule.workspace = true
 jrsonnet-ir.workspace = true
-jrsonnet-lexer = { version = "0.5.0-pre97", path = "../jrsonnet-lexer" }
+jrsonnet-lexer.workspace = true
 
 [lints]
 workspace = true

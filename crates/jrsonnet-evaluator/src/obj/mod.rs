@@ -26,8 +26,8 @@ use crate::{
 	arr::{PickObjectKeyValues, PickObjectValues},
 	bail,
 	error::{ErrorKind::*, suggest_object_fields},
+	evaluate::operator::evaluate_add_op,
 	identity_hash,
-	operator::evaluate_add_op,
 	val::{ArrValue, ThunkValue},
 };
 
@@ -96,7 +96,7 @@ impl FieldSortKey {
 
 // 0 - add
 //  12 - visibility
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Acyclic)]
 pub struct ObjFieldFlags(u8);
 impl ObjFieldFlags {
 	fn new(add: bool, visibility: Visibility) -> Self {
@@ -135,9 +135,7 @@ impl Debug for ObjFieldFlags {
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Trace)]
 pub struct ObjMember {
-	#[trace(skip)]
 	flags: ObjFieldFlags,
-	original_index: FieldIndex,
 	pub invoke: MaybeUnbound,
 	pub location: Option<Span>,
 }
@@ -235,6 +233,7 @@ cc_dyn!(
 	CcObjectCore, ObjectCore,
 	pub fn new() {...}
 );
+
 #[derive(Trace, Educe)]
 #[educe(Debug)]
 struct ObjValueInner {
@@ -398,6 +397,15 @@ pub struct SupThis {
 	this: ObjValue,
 }
 impl SupThis {
+	/// Create a `SupThis` for a freshly constructed object (no super).
+	pub fn new(this: ObjValue) -> Self {
+		Self {
+			sup: CoreIdx {
+				idx: this.0.cores.len(),
+			},
+			this,
+		}
+	}
 	pub fn has_super(&self) -> bool {
 		self.sup.super_exists()
 	}
@@ -428,7 +436,7 @@ impl SupThis {
 			bail!(NoSuperFound)
 		}
 		let mut out = ObjValue::builder();
-		out.reserve_cores(1).extend_with_core(StandaloneSuperCore {
+		out.extend_with_core(StandaloneSuperCore {
 			sup: self.sup,
 			this: self.this.clone(),
 		});
@@ -487,6 +495,7 @@ impl ObjValue {
 		let mut cores = Vec::with_capacity(sup.0.cores.len() + self.0.cores.len());
 		cores.extend(sup.0.cores.iter().cloned());
 		cores.extend(self.0.cores.iter().cloned());
+
 		let has_assertions = sup.0.has_assertions || self.0.has_assertions;
 		ObjValue(Cc::new(ObjValueInner {
 			cores,
@@ -501,11 +510,11 @@ impl ObjValue {
 	// }
 	/// Returns amount of visible object fields
 	/// If object only contains hidden fields - may return zero.
-	pub fn len(&self) -> usize {
+	pub fn len(&self) -> u32 {
 		self.fields_visibility()
 			.values()
 			.filter(|d| d.visible())
-			.count()
+			.count() as u32
 	}
 	/// For each field, calls callback.
 	/// If callback returns false - ends iteration prematurely.
@@ -521,13 +530,27 @@ impl ObjValue {
 			},
 		)
 	}
+
+	fn iter_cores(&self, idx: CoreIdx) -> impl Iterator<Item = &CcObjectCore> {
+		self.0.cores.iter().take(idx.idx).rev()
+	}
+	fn iter_cores_enumerate(&self, idx: CoreIdx) -> impl Iterator<Item = (CoreIdx, &CcObjectCore)> {
+		self.0
+			.cores
+			.iter()
+			.take(idx.idx)
+			.enumerate()
+			.rev()
+			.map(|(idx, o)| (CoreIdx { idx }, o))
+	}
+
 	fn enum_fields_idx(
 		&self,
 		super_depth: &mut SuperDepth,
 		handler: &mut EnumFieldsHandler<'_>,
 		idx: CoreIdx,
 	) -> bool {
-		for core in self.0.cores[..idx.idx].iter().rev() {
+		for core in self.iter_cores(idx) {
 			if !core.0.enum_fields_core(super_depth, handler) {
 				return false;
 			}
@@ -546,7 +569,7 @@ impl ObjValue {
 	}
 	fn has_field_include_hidden_idx(&self, name: IStr, core: CoreIdx) -> bool {
 		let mut skip = Saturating(0usize);
-		for ele in self.0.cores[..core.idx].iter().rev() {
+		for ele in self.iter_cores(core) {
 			match ele.0.has_field_include_hidden_core(name.clone()) {
 				HasFieldIncludeHidden::Exists => {
 					if skip.0 == 0 {
@@ -616,9 +639,9 @@ impl ObjValue {
 		let mut first_add = None;
 		let mut add_stack: Vec<Val> = Vec::new();
 		let mut skip = Saturating(0);
-		for (sup, core) in self.0.cores[..core.idx].iter().enumerate().rev() {
+		for (sup, core) in self.iter_cores_enumerate(core) {
 			let sup_this = SupThis {
-				sup: CoreIdx { idx: sup },
+				sup,
 				this: self.clone(),
 			};
 			match core.0.get_for_core(key.clone(), sup_this, skip.0 != 0)? {
@@ -686,7 +709,7 @@ impl ObjValue {
 	fn field_visibility_idx(&self, field: IStr, core: CoreIdx) -> Option<Visibility> {
 		let mut exists = false;
 		let mut skip = Saturating(0usize);
-		for ele in self.0.cores[..core.idx].iter().rev() {
+		for ele in self.iter_cores(core) {
 			let vis = ele.0.field_visibility_core(field.clone());
 			match vis {
 				FieldVisibility::Found(vis @ (Visibility::Unhide | Visibility::Hidden)) => {
@@ -1024,13 +1047,13 @@ impl<Kind> ObjMemberBuilder<Kind> {
 		self.location = Some(location);
 		self
 	}
-	fn build_member(self, binding: MaybeUnbound) -> (Kind, IStr, ObjMember) {
+	fn build_member(self, binding: MaybeUnbound) -> (Kind, IStr, FieldIndex, ObjMember) {
 		(
 			self.kind,
 			self.name,
+			self.original_index,
 			ObjMember {
 				flags: ObjFieldFlags::new(self.add, self.visibility),
-				original_index: self.original_index,
 				invoke: binding,
 				location: self.location,
 			},
@@ -1047,7 +1070,7 @@ impl ObjMemberBuilder<ExtendBuilder<'_>> {
 		self.binding(MaybeUnbound::Unbound(CcUnbound::new(bindable)));
 	}
 	pub fn binding(self, binding: MaybeUnbound) {
-		let (receiver, name, member) = self.build_member(binding);
+		let (receiver, name, _, member) = self.build_member(binding);
 		let new = receiver.0.clone();
 		*receiver.0 = new.extend_with_raw_member(name, member);
 	}

@@ -1,6 +1,9 @@
 [package]
 name = "jrsonnet-ir"
-description = "jsonnet language parser and AST"
+description = "Intermediate representation for the jsonnet language used by jrsonnet"
+keywords = ["jsonnet", "ir", "ast"]
+categories = ["compilers"]
+readme = "README.adoc"
 authors.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -19,6 +22,8 @@ jrsonnet-gcmodule.workspace = true
 static_assertions.workspace = true
 
 peg.workspace = true
+thiserror.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

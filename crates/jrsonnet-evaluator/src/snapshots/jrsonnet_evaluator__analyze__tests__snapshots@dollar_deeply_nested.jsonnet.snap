@@ -1,0 +1,196 @@
+---
+source: crates/jrsonnet-evaluator/src/analyze.rs
+expression: rendered
+input_file: crates/jrsonnet-evaluator/src/analysis_tests/dollar_deeply_nested.jsonnet
+---
+--- source ---
+{
+  top: 'outer',
+  a: {
+    b: {
+      c: $.top,
+      d: self,
+    },
+  },
+}
+--- root analysis ---
+object_dependent_depth: 0
+local_dependent_depth: 0
+errored: false
+--- diagnostics ---
+--- lir ---
+Obj(
+    MemberList(
+        LObjMembers {
+            frame_shape: ClosureShape {
+                captures: [],
+                n_locals: 1,
+            },
+            this: Some(
+                LocalSlot(
+                    0,
+                ),
+            ),
+            set_dollar: true,
+            uses_super: false,
+            locals: [],
+            asserts: None,
+            fields: [
+                LFieldMember {
+                    name: Fixed(
+                        "top",
+                    ),
+                    plus: false,
+                    visibility: Normal,
+                    value: (
+                        ClosureShape {
+                            captures: [],
+                            n_locals: 0,
+                        },
+                        Str(
+                            "outer",
+                        ),
+                    ),
+                },
+                LFieldMember {
+                    name: Fixed(
+                        "a",
+                    ),
+                    plus: false,
+                    visibility: Normal,
+                    value: (
+                        ClosureShape {
+                            captures: [],
+                            n_locals: 0,
+                        },
+                        Obj(
+                            MemberList(
+                                LObjMembers {
+                                    frame_shape: ClosureShape {
+                                        captures: [
+                                            Local(
+                                                LocalSlot(
+                                                    0,
+                                                ),
+                                            ),
+                                        ],
+                                        n_locals: 1,
+                                    },
+                                    this: None,
+                                    set_dollar: false,
+                                    uses_super: false,
+                                    locals: [],
+                                    asserts: None,
+                                    fields: [
+                                        LFieldMember {
+                                            name: Fixed(
+                                                "b",
+                                            ),
+                                            plus: false,
+                                            visibility: Normal,
+                                            value: (
+                                                ClosureShape {
+                                                    captures: [
+                                                        Capture(
+                                                            CaptureSlot(
+                                                                0,
+                                                            ),
+                                                        ),
+                                                    ],
+                                                    n_locals: 0,
+                                                },
+                                                Obj(
+                                                    MemberList(
+                                                        LObjMembers {
+                                                            frame_shape: ClosureShape {
+                                                                captures: [
+                                                                    Capture(
+                                                                        CaptureSlot(
+                                                                            0,
+                                                                        ),
+                                                                    ),
+                                                                ],
+                                                                n_locals: 1,
+                                                            },
+                                                            this: Some(
+                                                                LocalSlot(
+                                                                    0,
+                                                                ),
+                                                            ),
+                                                            set_dollar: false,
+                                                            uses_super: false,
+                                                            locals: [],
+                                                            asserts: None,
+                                                            fields: [
+                                                                LFieldMember {
+                                                                    name: Fixed(
+                                                                        "c",
+                                                                    ),
+                                                                    plus: false,
+                                                                    visibility: Normal,
+                                                                    value: (
+                                                                        ClosureShape {
+                                                                            captures: [
+                                                                                Capture(
+                                                                                    CaptureSlot(
+                                                                                        0,
+                                                                                    ),
+                                                                                ),
+                                                                            ],
+                                                                            n_locals: 0,
+                                                                        },
+                                                                        Index {
+                                                                            indexable: Slot(
+                                                                                Capture(
+                                                                                    CaptureSlot(
+                                                                                        0,
+                                                                                    ),
+                                                                                ),
+                                                                            ),
+                                                                            parts: [
+                                                                                LIndexPart {
+                                                                                    span: virtual:<test>:45-48,
+                                                                                    value: Str(
+                                                                                        "top",
+                                                                                    ),
+                                                                                },
+                                                                            ],
+                                                                        },
+                                                                    ),
+                                                                },
+                                                                LFieldMember {
+                                                                    name: Fixed(
+                                                                        "d",
+                                                                    ),
+                                                                    plus: false,
+                                                                    visibility: Normal,
+                                                                    value: (
+                                                                        ClosureShape {
+                                                                            captures: [],
+                                                                            n_locals: 0,
+                                                                        },
+                                                                        Slot(
+                                                                            Local(
+                                                                                LocalSlot(
+                                                                                    0,
+                                                                                ),
+                                                                            ),
+                                                                        ),
+                                                                    ),
+                                                                },
+                                                            ],
+                                                        },
+                                                    ),
+                                                ),
+                                            ),
+                                        },
+                                    ],
+                                },
+                            ),
+                        ),
+                    ),
+                },
+            ],
+        },
+    ),
+)

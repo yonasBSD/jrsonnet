@@ -829,7 +829,7 @@ pub fn format_obj(str: &str, values: &ObjValue) -> Result<String> {
 #[cfg(test)]
 pub mod test_format {
 	use super::*;
-	use crate::val::NumValue;
+	use crate::NumValue;
 
 	#[test]
 	fn parse() {

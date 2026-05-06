@@ -1,1 +1,1 @@
-runtime error: tried to manifest function
+static analysis errors: local is already defined in the current frame: x; do not define identity functions manually, use std.id instead

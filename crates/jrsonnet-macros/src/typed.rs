@@ -22,6 +22,8 @@ struct TypedAttr {
 	add: bool,
 	// Should it be `field::` instead of `field:`
 	hide: bool,
+	// Builtin value
+	method: bool,
 }
 impl Parse for TypedAttr {
 	fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -64,6 +66,9 @@ impl Parse for TypedAttr {
 			} else if lookahead.peek(kw::hide) {
 				input.parse::<kw::hide>()?;
 				out.hide = true;
+			} else if lookahead.peek(kw::method) {
+				input.parse::<kw::method>()?;
+				out.method = true;
 			} else if input.is_empty() {
 				break;
 			} else {
@@ -134,7 +139,7 @@ impl TypedField {
 	}
 
 	fn expand_field(&self) -> Option<TokenStream> {
-		if self.is_option {
+		if self.is_option || self.attr.method {
 			return None;
 		}
 		let name = self.name()?;
@@ -256,7 +261,11 @@ impl TypedField {
 				} else {
 					quote! {}
 				};
-				let value = if self.is_lazy {
+				let value = if self.attr.method {
+					quote! {
+						out.method(__names[#name].clone(), value);
+					}
+				} else if self.is_lazy {
 					quote! {
 						out.field(__names[#name].clone())
 							#hide
@@ -398,6 +407,7 @@ pub fn derive_from_untyped_inner(input: DeriveInput) -> Result<TokenStream> {
 
 			impl #impl_generics FromUntyped for #ident #ty_generics #where_clause {
 				fn from_untyped(value: Val) -> JrResult<Self> {
+					<Self as Typed>::TYPE.check(&value)?;
 					let obj = value.as_obj().expect("shape is correct");
 					Self::parse(&obj)
 				}

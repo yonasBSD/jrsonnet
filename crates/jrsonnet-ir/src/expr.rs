@@ -1,13 +1,13 @@
 use std::{
 	fmt::{self, Debug, Display},
-	ops::Deref,
-	rc::Rc,
+	ops::{Deref, RangeInclusive},
 };
 
 use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_interner::IStr;
 
 use crate::{
+	NumValue,
 	function::{FunctionSignature, ParamDefault, ParamName, ParamParse},
 	source::Source,
 };
@@ -38,7 +38,10 @@ impl Visibility {
 }
 
 #[derive(Debug, PartialEq, Acyclic)]
-pub struct AssertStmt(pub Spanned<Expr>, pub Option<Spanned<Expr>>);
+pub struct AssertStmt {
+	pub assertion: Spanned<Expr>,
+	pub message: Option<Expr>,
+}
 
 #[derive(Debug, PartialEq, Acyclic)]
 pub struct FieldMember {
@@ -46,7 +49,7 @@ pub struct FieldMember {
 	pub plus: bool,
 	pub params: Option<ExprParams>,
 	pub visibility: Visibility,
-	pub value: Rc<Expr>,
+	pub value: Expr,
 }
 
 #[derive(Debug, PartialEq, Acyclic)]
@@ -152,13 +155,13 @@ impl Display for BinaryOpType {
 #[derive(Debug, PartialEq, Acyclic)]
 pub struct ExprParam {
 	pub destruct: Destruct,
-	pub default: Option<Rc<Expr>>,
+	pub default: Option<Expr>,
 }
 
 /// Defined function parameters
-#[derive(Debug, Clone, PartialEq, Acyclic)]
+#[derive(Debug, PartialEq, Acyclic)]
 pub struct ExprParams {
-	pub exprs: Rc<Vec<ExprParam>>,
+	pub exprs: Vec<ExprParam>,
 	pub signature: FunctionSignature,
 	pub(crate) binds_len: usize,
 }
@@ -187,23 +190,28 @@ impl ExprParams {
 					.collect(),
 			),
 			binds_len: exprs.iter().map(|v| v.destruct.binds_len()).sum(),
-			exprs: Rc::new(exprs),
+			exprs,
 		}
 	}
 }
 
 #[derive(Debug, PartialEq, Acyclic)]
 pub struct ArgsDesc {
-	pub unnamed: Vec<Rc<Expr>>,
-	pub named: Vec<(IStr, Rc<Expr>)>,
+	pub unnamed: Vec<Expr>,
+	pub names: Vec<IStr>,
+	pub values: Vec<Expr>,
 }
 impl ArgsDesc {
-	pub fn new(unnamed: Vec<Rc<Expr>>, named: Vec<(IStr, Rc<Expr>)>) -> Self {
-		Self { unnamed, named }
+	pub fn new(unnamed: Vec<Expr>, names: Vec<IStr>, values: Vec<Expr>) -> Self {
+		Self {
+			unnamed,
+			names,
+			values,
+		}
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Acyclic)]
+#[derive(Debug, PartialEq, Eq, Acyclic)]
 pub enum DestructRest {
 	/// ...rest
 	Keep(IStr),
@@ -211,9 +219,9 @@ pub enum DestructRest {
 	Drop,
 }
 
-#[derive(Debug, Clone, PartialEq, Acyclic)]
+#[derive(Debug, PartialEq, Acyclic)]
 pub enum Destruct {
-	Full(IStr),
+	Full(Spanned<IStr>),
 	#[cfg(feature = "exp-destruct")]
 	Skip,
 	#[cfg(feature = "exp-destruct")]
@@ -225,7 +233,7 @@ pub enum Destruct {
 	#[cfg(feature = "exp-destruct")]
 	Object {
 		#[allow(clippy::type_complexity)]
-		fields: Vec<(IStr, Option<Destruct>, Option<Rc<Spanned<Expr>>>)>,
+		fields: Vec<(IStr, Option<Destruct>, Option<Spanned<Expr>>)>,
 		rest: Option<DestructRest>,
 	},
 }
@@ -233,7 +241,7 @@ impl Destruct {
 	/// Name of destructure, used for function parameter names
 	pub fn name(&self) -> ParamName {
 		match self {
-			Self::Full(name) => ParamName::Named(name.clone()),
+			Self::Full(name) => ParamName::Named(name.value.clone()),
 			#[cfg(feature = "exp-destruct")]
 			_ => ParamName::Unnamed,
 		}
@@ -277,12 +285,12 @@ impl Destruct {
 pub enum BindSpec {
 	Field {
 		into: Destruct,
-		value: Rc<Expr>,
+		value: Expr,
 	},
 	Function {
 		name: IStr,
 		params: ExprParams,
-		value: Rc<Expr>,
+		value: Expr,
 	},
 }
 impl BindSpec {
@@ -314,15 +322,15 @@ pub enum CompSpec {
 
 #[derive(Debug, PartialEq, Acyclic)]
 pub struct ObjComp {
-	pub locals: Rc<Vec<BindSpec>>,
-	pub field: Rc<FieldMember>,
+	pub locals: Vec<BindSpec>,
+	pub field: Box<FieldMember>,
 	pub compspecs: Vec<CompSpec>,
 }
 
 #[derive(Debug, PartialEq, Acyclic)]
 pub struct ObjMembers {
-	pub locals: Rc<Vec<BindSpec>>,
-	pub asserts: Rc<Vec<AssertStmt>>,
+	pub locals: Vec<BindSpec>,
+	pub asserts: Vec<AssertStmt>,
 	pub fields: Vec<FieldMember>,
 }
 
@@ -362,7 +370,7 @@ pub struct BinaryOp {
 	pub rhs: Expr,
 }
 
-#[derive(Debug, PartialEq, Acyclic)]
+#[derive(Debug, PartialEq, Acyclic, Clone, Copy)]
 pub enum ImportKind {
 	Normal,
 	Str,
@@ -390,12 +398,12 @@ pub enum Expr {
 	/// String value: "hello"
 	Str(IStr),
 	/// Number: 1, 2.0, 2e+20
-	Num(f64),
+	Num(NumValue),
 	/// Variable name: test
 	Var(Spanned<IStr>),
 
 	/// Array of expressions: [1, 2, "Hello"]
-	Arr(Rc<Vec<Expr>>),
+	Arr(Vec<Expr>),
 	/// Array comprehension:
 	/// ```jsonnet
 	///  ingredients: [
@@ -407,19 +415,19 @@ pub enum Expr {
 	///    ]
 	///  ],
 	/// ```
-	ArrComp(Rc<Expr>, Vec<CompSpec>),
+	ArrComp(Box<Expr>, Vec<CompSpec>),
 
 	/// Object: {a: 2}
 	Obj(ObjBody),
 	/// Object extension: var1 {b: 2}
-	ObjExtend(Rc<Expr>, ObjBody),
+	ObjExtend(Box<Expr>, ObjBody),
 
 	/// -2
 	UnaryOp(UnaryOpType, Box<Expr>),
 	/// 2 - 2
 	BinaryOp(Box<BinaryOp>),
 	/// assert 2 == 2 : "Math is broken"
-	AssertExpr(Rc<AssertExpr>),
+	AssertExpr(Box<AssertExpr>),
 	/// local a = 2; { b: a }
 	LocalExpr(Vec<BindSpec>, Box<Expr>),
 
@@ -435,7 +443,7 @@ pub enum Expr {
 		parts: Vec<IndexPart>,
 	},
 	/// function(x) x
-	Function(ExprParams, Rc<Expr>),
+	Function(ExprParams, Box<Expr>),
 	/// if true == false then 1 else 2
 	IfElse(Box<IfElse>),
 	Slice(Box<Slice>),
@@ -456,6 +464,15 @@ pub struct Span(pub Source, pub u32, pub u32);
 impl Span {
 	pub fn belongs_to(&self, other: &Span) -> bool {
 		other.0 == self.0 && other.1 <= self.1 && other.2 >= self.2
+	}
+	pub fn range(&self) -> RangeInclusive<usize> {
+		let start = self.1;
+		let mut end = self.2;
+		if end > start {
+			// Because it is originally exclusive
+			end -= 1;
+		}
+		start as usize..=end as usize
 	}
 }
 
@@ -483,6 +500,21 @@ impl<T: Acyclic> Spanned<T> {
 	#[inline]
 	pub fn new(value: T, span: Span) -> Self {
 		Self { value, span }
+	}
+	pub fn map<U: Acyclic>(self, v: impl FnOnce(T) -> U) -> Spanned<U> {
+		Spanned {
+			span: self.span,
+			value: v(self.value),
+		}
+	}
+	pub fn as_ref<'a>(&'a self) -> Spanned<&'a T>
+	where
+		&'a T: Acyclic,
+	{
+		Spanned {
+			span: self.span.clone(),
+			value: &self.value,
+		}
 	}
 }
 

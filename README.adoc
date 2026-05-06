@@ -2,7 +2,7 @@
 <p align="center"><a href="https://delta.rocks/jrsonnet"><img alt="jrsonnet logo" src="https://delta.rocks/og/page.svg?title=jrsonnet&sig=cecb5a7de6500c39b0d284e4d14a3bef6d083ce19b8f6e77c82d70c57bf6960e&brand=jrsonnet&subtitle=fast+jsonnet+interpreter" height="300"></img></a></p>
 <p align="center">
   <a href="https://github.com/CertainLach/jrsonnet/releases"><img alt="release" src="https://img.shields.io/github/v/tag/CertainLach/jrsonnet?color=%23fb4934&label=latest%20release&style=for-the-badge"></img></a>
-  <a href="https://opencollective.com/jrsonnet"><img alt="opencollective" src="https://delta.rocks/badge/backers.svg"></img></a>
+  <a href="https://delta.rocks/donate"><img alt="donate" src="https://delta.rocks/badge/backers.svg"></img></a>
   <a href="./LICENSE"><img alt="license" src="https://delta.rocks/badge/License · MIT.svg"></img></a>
 </p>
 ++++
@@ -75,6 +75,21 @@ image:https://docs.rs/jrsonnet-evaluator/badge.svg[alt=docs.rs, link=https://doc
 
 Jrsonnet is written in rust itself, so just add it as dependency
 
+=== JavaScript/TypeScript (WASM)
+
+// image:https://img.shields.io/npm/v/jrsonnet[alt=npm, link=https://www.npmjs.com/package/jrsonnet]
+image:https://jsr.io/badges/@jrsonnet/jrsonnet[alt=JSR, link=https://jsr.io/@jrsonnet/jrsonnet]
+image:https://jsr.io/badges/@jrsonnet/jrsonnet/score[alt=JSR score, link=https://jsr.io/@jrsonnet/jrsonnet]
+
+WASM bindings are published to JSR as `@jrsonnet/jrsonnet`.
+
+[source,sh]
+----
+deno add jsr:@jrsonnet/jrsonnet
+----
+
+// npm package (`jrsonnet`) is not yet published.
+
 === Python
 
 image:https://img.shields.io/pypi/v/rjsonnet[alt=crates.io, link=https://pypi.org/project/rjsonnet/]
@@ -87,6 +102,6 @@ Jrsonnet provides a standard `libjsonnet.so` shared library and should work as d
 
 === Other
 
-WASM bingings are also available, Java bindings (Both JNI and WASM compiled to `.class`) are in progress
+Java bindings (Both JNI and WASM compiled to `.class`) are in progress
 
 See link:./bindings/[bindings] for more information.
