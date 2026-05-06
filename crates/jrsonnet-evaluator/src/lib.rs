@@ -42,7 +42,9 @@ pub use import::*;
 use jrsonnet_gcmodule::{Cc, Trace, cc_dyn};
 pub use jrsonnet_interner::{IBytes, IStr};
 use jrsonnet_ir::Expr;
-pub use jrsonnet_ir::{NumValue, Source, SourcePath, SourceUrl, SourceVirtual, Span};
+pub use jrsonnet_ir::{
+	NumValue, Source, SourceDefaultIgnoreJpath, SourcePath, SourceUrl, SourceVirtual, Span,
+};
 #[doc(hidden)]
 pub use jrsonnet_macros;
 

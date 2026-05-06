@@ -26,6 +26,13 @@ ir-parser = ["dep:jrsonnet-ir-parser"]
 # Use PEG parser
 peg-parser = ["dep:jrsonnet-peg-parser"]
 
+experimental = [
+  "exp-preserve-order",
+  "exp-destruct",
+  "exp-object-iteration",
+  "exp-bigint",
+  "exp-null-coaelse",
+]
 # Allows to preserve field order in objects
 exp-preserve-order = []
 # Implements field destructuring

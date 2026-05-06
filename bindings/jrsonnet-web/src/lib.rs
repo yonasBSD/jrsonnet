@@ -31,6 +31,7 @@ pub enum ValKind {
 	Arr,
 	Obj,
 	Func,
+	BigInt,
 }
 
 thread_local! {
@@ -132,6 +133,8 @@ impl From<ValType> for ValKind {
 			ValType::Arr => Self::Arr,
 			ValType::Obj => Self::Obj,
 			ValType::Func => Self::Func,
+			#[cfg(feature = "exp-bigint")]
+			ValType::BigInt => Self::BigInt,
 		}
 	}
 }
@@ -182,6 +185,26 @@ impl WasmVal {
 	pub fn string(s: String) -> Self {
 		Self::new(Val::string(s))
 	}
+	pub fn bigint(value: js_sys::BigInt) -> Result<Self, JsError> {
+		#[cfg(feature = "exp-bigint")]
+		{
+			let s: String = value
+				.to_string(10)
+				.map_err(|_| JsError::new("invalid bigint"))?
+				.into();
+			let bi = s
+				.parse::<num_bigint::BigInt>()
+				.map_err(|e| JsError::new(&format!("failed to parse bigint: {e}")))?;
+			Ok(Self::new(Val::BigInt(Box::new(bi))))
+		}
+		#[cfg(not(feature = "exp-bigint"))]
+		{
+			let _ = value;
+			Err(JsError::new(
+				"bigint support is not enabled in this build (exp-bigint feature)",
+			))
+		}
+	}
 	pub fn arr(items: Vec<WasmVal>) -> Self {
 		Self::new(Val::arr(
 			items.into_iter().map(|v| v.val).collect::<Vec<_>>(),
@@ -211,6 +234,24 @@ impl WasmVal {
 	#[wasm_bindgen(js_name = asNum)]
 	pub fn as_num(&self) -> Option<f64> {
 		self.val.as_num()
+	}
+	#[wasm_bindgen(js_name = asBigint)]
+	pub fn as_bigint(&self) -> Result<Option<js_sys::BigInt>, JsError> {
+		#[cfg(feature = "exp-bigint")]
+		{
+			let Some(bi) = self.val.as_bigint() else {
+				return Ok(None);
+			};
+			let big = js_sys::BigInt::new(&JsValue::from_str(&bi.to_string()))
+				.map_err(|e| JsError::new(&format!("{e:?}")))?;
+			Ok(Some(big))
+		}
+		#[cfg(not(feature = "exp-bigint"))]
+		{
+			Err(JsError::new(
+				"bigint support is not enabled in this build (exp-bigint feature)",
+			))
+		}
 	}
 	#[wasm_bindgen(js_name = asString)]
 	pub fn as_string(&self) -> Option<String> {
@@ -259,7 +300,11 @@ impl WasmVal {
 
 	#[wasm_bindgen(js_name = manifestJson)]
 	pub fn manifest_json(&self, indent: u32) -> Result<String, JsValue> {
-		self.manifest_with(JsonFormat::cli(indent as usize))
+		self.manifest_with(JsonFormat::cli(
+			indent as usize,
+			#[cfg(feature = "exp-preserve-order")]
+			false,
+		))
 	}
 	#[wasm_bindgen(js_name = manifestToString)]
 	pub fn manifest_to_string(&self) -> Result<String, JsValue> {
@@ -271,7 +316,12 @@ impl WasmVal {
 	}
 	#[wasm_bindgen(js_name = manifestYaml)]
 	pub fn manifest_yaml(&self, indent: u32, quote_keys: bool) -> Result<String, JsValue> {
-		self.manifest_with(YamlFormat::std_to_yaml(indent != 0, quote_keys))
+		self.manifest_with(YamlFormat::std_to_yaml(
+			indent != 0,
+			quote_keys,
+			#[cfg(feature = "exp-preserve-order")]
+			false,
+		))
 	}
 	#[wasm_bindgen(js_name = manifestYamlStream)]
 	pub fn manifest_yaml_stream(
@@ -281,7 +331,12 @@ impl WasmVal {
 		c_document_end: bool,
 	) -> Result<String, JsValue> {
 		self.manifest_with(YamlStreamFormat::std_yaml_stream(
-			YamlFormat::std_to_yaml(indent != 0, quote_keys),
+			YamlFormat::std_to_yaml(
+				indent != 0,
+				quote_keys,
+				#[cfg(feature = "exp-preserve-order")]
+				false,
+			),
 			c_document_end,
 		))
 	}
@@ -291,11 +346,18 @@ impl WasmVal {
 	}
 	#[wasm_bindgen(js_name = manifestToml)]
 	pub fn manifest_toml(&self, indent: u32) -> Result<String, JsValue> {
-		self.manifest_with(TomlFormat::std_to_toml(" ".repeat(indent as usize)))
+		self.manifest_with(TomlFormat::std_to_toml(
+			" ".repeat(indent as usize),
+			#[cfg(feature = "exp-preserve-order")]
+			false,
+		))
 	}
 	#[wasm_bindgen(js_name = manifestIni)]
 	pub fn manifest_ini(&self) -> Result<String, JsValue> {
-		self.manifest_with(IniFormat::std())
+		self.manifest_with(IniFormat::std(
+			#[cfg(feature = "exp-preserve-order")]
+			false,
+		))
 	}
 }
 
@@ -340,7 +402,10 @@ pub struct WasmObjValue {
 impl WasmObjValue {
 	pub fn keys(&self) -> Vec<String> {
 		self.obj
-			.fields()
+			.fields(
+				#[cfg(feature = "exp-preserve-order")]
+				false,
+			)
 			.into_iter()
 			.map(|s| s.to_string())
 			.collect()

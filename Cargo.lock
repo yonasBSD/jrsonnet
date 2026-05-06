@@ -2695,6 +2695,7 @@ dependencies = [
  "jrsonnet-stdlib",
  "jrsonnet-types",
  "js-sys",
+ "num-bigint",
  "rustc-hash 2.1.2",
  "url",
  "wasm-bindgen",
