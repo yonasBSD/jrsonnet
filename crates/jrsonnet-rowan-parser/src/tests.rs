@@ -241,6 +241,25 @@ mk_test!(
 	for_obj_spec_value_destruct => r#"
 		{ [k]: a + b for [k]: [a, b] in obj }
 	"#
+
+	multi_line_comment_doc => r#"
+		{ a:: 1, /** doc **/ b:: 2 }
+	"#
+	multi_line_comment_empty => r#"
+		/**/ 1
+	"#
+	multi_line_comment_triple_star => r#"
+		/***/ 2
+	"#
+	multi_line_comment_inner_star => r#"
+		/* * */ 3
+	"#
+	multi_line_comment_too_short => r#"
+		/*/
+	"#
+	multi_line_comment_unterminated => r#"
+		/** unterminated
+	"#
 );
 
 #[test]
