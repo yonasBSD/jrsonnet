@@ -39,12 +39,104 @@
         mkForce
         optionals
         optionalAttrs
+        concatMapStringsSep
         ;
+      rel = system: inputs.self.legacyPackages.${system}.release;
+      releaseSections = [
+        {
+          name = "Linux (glibc)";
+          artifacts = [
+            {
+              label = "jrsonnet-x86_64-linux-glibc";
+              drv = (rel "x86_64-linux").jrsonnet-linux-glibc;
+            }
+            {
+              label = "jrsonnet-experimental-x86_64-linux-glibc";
+              drv = (rel "x86_64-linux").jrsonnet-experimental-linux-glibc;
+            }
+            {
+              label = "jrsonnet-aarch64-linux-glibc";
+              drv = (rel "aarch64-linux").jrsonnet-linux-glibc;
+            }
+            {
+              label = "jrsonnet-experimental-aarch64-linux-glibc";
+              drv = (rel "aarch64-linux").jrsonnet-experimental-linux-glibc;
+            }
+            {
+              label = "jrsonnet-i686-linux-glibc";
+              drv = (rel "i686-linux").jrsonnet-linux-glibc;
+            }
+            {
+              label = "jrsonnet-experimental-i686-linux-glibc";
+              drv = (rel "i686-linux").jrsonnet-experimental-linux-glibc;
+            }
+            {
+              label = "jrsonnet-armv7l-linux-glibc";
+              drv = (rel "armv7l-linux").jrsonnet-linux-glibc;
+            }
+            {
+              label = "jrsonnet-experimental-armv7l-linux-glibc";
+              drv = (rel "armv7l-linux").jrsonnet-experimental-linux-glibc;
+            }
+          ];
+        }
+        {
+          name = "Linux (musl)";
+          artifacts = [
+            {
+              label = "jrsonnet-x86_64-linux-musl";
+              drv = (rel "x86_64-linux").jrsonnet-linux-musl;
+            }
+            {
+              label = "jrsonnet-experimental-x86_64-linux-musl";
+              drv = (rel "x86_64-linux").jrsonnet-experimental-linux-musl;
+            }
+            {
+              label = "jrsonnet-aarch64-linux-musl";
+              drv = (rel "aarch64-linux").jrsonnet-linux-musl;
+            }
+            {
+              label = "jrsonnet-experimental-aarch64-linux-musl";
+              drv = (rel "aarch64-linux").jrsonnet-experimental-linux-musl;
+            }
+          ];
+        }
+        {
+          name = "macOS";
+          artifacts = [
+            {
+              label = "jrsonnet-aarch64-darwin";
+              drv = (rel "aarch64-linux").jrsonnet-darwin;
+            }
+            {
+              label = "jrsonnet-experimental-aarch64-darwin";
+              drv = (rel "aarch64-linux").jrsonnet-experimental-darwin;
+            }
+          ];
+        }
+        {
+          name = "Windows";
+          artifacts = [
+            {
+              label = "jrsonnet-x86_64-windows";
+              drv = (rel "x86_64-linux").jrsonnet-windows;
+              windows = true;
+            }
+            {
+              label = "jrsonnet-experimental-x86_64-windows";
+              drv = (rel "x86_64-linux").jrsonnet-experimental-windows;
+              windows = true;
+            }
+          ];
+        }
+      ];
+      releaseArtifacts = builtins.concatMap (s: s.artifacts) releaseSections;
     in
     inputs.flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
         inputs.shelly.flakeModule
         inputs.hercules-ci-effects.flakeModule
+        ./nix/post-comment.nix
       ];
       systems = [
         "x86_64-linux"
@@ -70,6 +162,15 @@
           targetArch = pkgs.stdenv.hostPlatform.parsed.cpu.name;
           rustfmt = (pkgs.fenix.complete or pkgs.fenix.stable).rustfmt;
           toolchain = pkgs.fenix.combine [
+            (pkgs.fenix.stable.withComponents [
+              "cargo"
+              "clippy"
+              "rustc"
+              "rustfmt"
+            ])
+            pkgs.fenix.targets.wasm32-unknown-unknown.stable.rust-std
+          ];
+          devToolchain = pkgs.fenix.combine [
             ((pkgs.fenix.complete or pkgs.fenix.stable).withComponents [
               "cargo"
               "clippy"
@@ -81,6 +182,7 @@
             pkgs.fenix.targets.wasm32-unknown-unknown.latest.rust-std
           ];
           craneLib = (inputs.crane.mkLib pkgs).overrideToolchain toolchain;
+          craneLibDev = (inputs.crane.mkLib pkgs).overrideToolchain devToolchain;
           treefmt =
             (inputs.treefmt-nix.lib.evalModule pkgs (import ./treefmt.nix { inherit rustfmt; })).config.build;
 
@@ -116,6 +218,9 @@
         in
         {
           legacyPackages = {
+            fetchJrq = pkgs.callPackage ./nix/fetch-jrq.nix {
+              inherit (self'.packages) jrsonnet;
+            };
             release = optionalAttrs pkgs.stdenv.hostPlatform.isLinux (
               {
                 jrsonnet-linux-glibc = self'.packages.jrsonnet;
@@ -152,6 +257,7 @@
             );
             benchmarks = optionalAttrs (system == "x86_64-linux" || system == "aarch64-linux") {
               default = pkgs.callPackage ./nix/benchmarks.nix {
+                inherit (config.legacyPackages) fetchJrq;
                 inherit (config.legacyPackages.jsonnetImpls)
                   go-jsonnet
                   sjsonnet
@@ -166,6 +272,7 @@
                 ];
               };
               quick = pkgs.callPackage ./nix/benchmarks.nix {
+                inherit (config.legacyPackages) fetchJrq;
                 inherit (config.legacyPackages.jsonnetImpls)
                   go-jsonnet
                   sjsonnet
@@ -181,6 +288,7 @@
                 ];
               };
               against-release = pkgs.callPackage ./nix/benchmarks.nix {
+                inherit (config.legacyPackages) fetchJrq;
                 inherit (config.legacyPackages.jsonnetImpls)
                   go-jsonnet
                   sjsonnet
@@ -203,6 +311,7 @@
                 ];
               };
               quick-against-release = pkgs.callPackage ./nix/benchmarks.nix {
+                inherit (config.legacyPackages) fetchJrq;
                 inherit (config.legacyPackages.jsonnetImpls)
                   go-jsonnet
                   sjsonnet
@@ -263,7 +372,7 @@
           };
           formatter = mkIf (system != "armv7l-linux") treefmt.wrapper;
           shelly.shells.default = {
-            factory = craneLib.devShell;
+            factory = craneLibDev.devShell;
             packages =
               with pkgs;
               [
@@ -300,80 +409,10 @@
               ]);
           };
         };
-      hercules-ci.github-releases.files =
-        let
-          rel = system: inputs.self.legacyPackages.${system}.release;
-          bin = drv: "${drv}/bin/jrsonnet";
-          exe = drv: "${drv}/bin/jrsonnet.exe";
-        in
-        [
-          {
-            label = "jrsonnet-x86_64-linux-musl";
-            path = bin (rel "x86_64-linux").jrsonnet-linux-musl;
-          }
-          {
-            label = "jrsonnet-experimental-x86_64-linux-musl";
-            path = bin (rel "x86_64-linux").jrsonnet-experimental-linux-musl;
-          }
-          {
-            label = "jrsonnet-aarch64-darwin";
-            path = bin (rel "aarch64-linux").jrsonnet-darwin;
-          }
-          {
-            label = "jrsonnet-experimental-aarch64-darwin";
-            path = bin (rel "aarch64-linux").jrsonnet-experimental-darwin;
-          }
-          {
-            label = "jrsonnet-x86_64-windows.exe";
-            path = exe (rel "x86_64-linux").jrsonnet-windows;
-          }
-          {
-            label = "jrsonnet-experimental-x86_64-windows.exe";
-            path = exe (rel "x86_64-linux").jrsonnet-experimental-windows;
-          }
-
-          {
-            label = "jrsonnet-aarch64-linux-musl";
-            path = bin (rel "aarch64-linux").jrsonnet-linux-musl;
-          }
-          {
-            label = "jrsonnet-experimental-aarch64-linux-musl";
-            path = bin (rel "aarch64-linux").jrsonnet-experimental-linux-musl;
-          }
-
-          {
-            label = "jrsonnet-x86_64-linux-glibc";
-            path = bin (rel "x86_64-linux").jrsonnet-linux-glibc;
-          }
-          {
-            label = "jrsonnet-experimental-x86_64-linux-glibc";
-            path = bin (rel "x86_64-linux").jrsonnet-experimental-linux-glibc;
-          }
-          {
-            label = "jrsonnet-aarch64-linux-glibc";
-            path = bin (rel "aarch64-linux").jrsonnet-linux-glibc;
-          }
-          {
-            label = "jrsonnet-experimental-aarch64-linux-glibc";
-            path = bin (rel "aarch64-linux").jrsonnet-experimental-linux-glibc;
-          }
-          {
-            label = "jrsonnet-i686-linux-glibc";
-            path = bin (rel "i686-linux").jrsonnet-linux-glibc;
-          }
-          {
-            label = "jrsonnet-experimental-i686-linux-glibc";
-            path = bin (rel "i686-linux").jrsonnet-experimental-linux-glibc;
-          }
-          {
-            label = "jrsonnet-armv7l-linux-glibc";
-            path = bin (rel "armv7l-linux").jrsonnet-linux-glibc;
-          }
-          {
-            label = "jrsonnet-experimental-armv7l-linux-glibc";
-            path = bin (rel "armv7l-linux").jrsonnet-experimental-linux-glibc;
-          }
-        ];
+      hercules-ci.github-releases.files = map (a: {
+        label = a.label + (if a.windows or false then ".exe" else "");
+        path = "${a.drv}/bin/jrsonnet${if a.windows or false then ".exe" else ""}";
+      }) releaseArtifacts;
       hercules-ci.cargo-publish = {
         enable = true;
         secretName = "crates-io";
@@ -387,6 +426,30 @@
         when = {
           dayOfWeek = [ "Sat" ];
         };
+      };
+      hercules-ci.post-comment = {
+        enable = true;
+        caches = [ "jrsonnet.cachix.org" ];
+        script =
+          let
+            benchmarks = inputs.self.legacyPackages.x86_64-linux.benchmarks.default;
+            renderSection = s: ''
+              echo
+              echo "### ${s.name}"
+              echo
+              ${concatMapStringsSep "\n" (a: ''echo "- [${a.label}]($(nixTar ${a.drv}))"'') s.artifacts}
+            '';
+          in
+          ''
+            {
+              echo "## Benchmark results"
+              echo
+              echo "[View rendered]($(nixRender ${benchmarks}))"
+              echo
+              echo "## Downloads"
+              ${concatMapStringsSep "\n" renderSection releaseSections}
+            } > $out
+          '';
       };
       herculesCI =
         { lib, config, ... }:

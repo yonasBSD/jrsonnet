@@ -7,7 +7,12 @@ members = [
   "tests",
   "xtask",
 ]
-default-members = ["cmds/jrsonnet", "cmds/jrsonnet-fmt", "bindings/jsonnet"]
+default-members = [
+  "cmds/jrsonnet",
+  "cmds/jrsonnet-fmt",
+  "cmds/jrb",
+  "bindings/jsonnet",
+]
 resolver = "2"
 
 [workspace.package]
@@ -30,6 +35,7 @@ jrsonnet-cli = { path = "./crates/jrsonnet-cli", version = "0.5.0-pre98" }
 jrsonnet-types = { path = "./crates/jrsonnet-types", version = "0.5.0-pre98" }
 jrsonnet-formatter = { path = "./crates/jrsonnet-formatter", version = "0.5.0-pre98" }
 jrsonnet-lexer = { path = "./crates/jrsonnet-lexer", version = "0.5.0-pre98" }
+jrsonnet-pkg = { path = "./crates/jrsonnet-pkg", version = "0.5.0-pre98" }
 jrsonnet-gcmodule = { version = "0.5.0" }
 # Diagnostics.
 # hi-doc is my library, which handles text formatting very well, but isn't polished enough yet
@@ -115,6 +121,17 @@ wasm-bindgen-futures = "0.4.56"
 js-sys = "0.3.83"
 console_error_panic_hook = "0.1"
 getrandom = "0.3.4"
+
+# Bundler
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+reqwest = { version = "0.13", default-features = false, features = [
+  "blocking",
+] }
+zip = { version = "8", default-features = false, features = ["deflate"] }
+directories = "6.0.0"
+gix = { version = "0.83.0", features = ["blocking-network-client"] }
+camino = { version = "1.2.2", features = ["serde1"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

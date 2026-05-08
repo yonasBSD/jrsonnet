@@ -6,6 +6,7 @@ input_file: crates/jrsonnet-peg-parser/src/tests/reserved.jsonnet
 Arr(
     [
         Literal(
+            virtual:<test>:2-6,
             Null,
         ),
         Var(

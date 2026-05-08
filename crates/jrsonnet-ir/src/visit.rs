@@ -1,5 +1,7 @@
 use jrsonnet_interner::IStr;
 
+#[cfg(feature = "exp-object-iteration")]
+use crate::ForObjSpecData;
 use crate::{
 	ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BindSpec, CompSpec, Destruct, Expr, ExprParam,
 	ExprParams, FieldMember, FieldName, ForSpecData, IfElse, IfSpecData, ImportKind, IndexPart,
@@ -67,6 +69,17 @@ pub fn visit_comp_spec<V: Visitor>(v: &mut V, c: &CompSpec) {
 		CompSpec::ForSpec(for_spec_data) => {
 			let ForSpecData { destruct, over } = for_spec_data;
 			visit_destruct(v, destruct);
+			v.visit_expr(over);
+		}
+		#[cfg(feature = "exp-object-iteration")]
+		CompSpec::ForObjSpec(for_obj_spec_data) => {
+			let ForObjSpecData {
+				key: _,
+				visibility: _,
+				value,
+				over,
+			} = for_obj_spec_data;
+			visit_destruct(v, value);
 			v.visit_expr(over);
 		}
 	}
@@ -165,7 +178,7 @@ pub fn visit_assert_stmt<V: Visitor>(v: &mut V, ass: &AssertStmt) {
 }
 pub fn visit_expr<V: Visitor>(v: &mut V, e: &Expr) {
 	match e {
-		Expr::Literal(_literal_type) => {}
+		Expr::Literal(_span, _literal_type) => {}
 		Expr::Str(_istr) => {}
 		Expr::Num(_num) => {}
 		Expr::Var(_spanned) => {}
@@ -241,7 +254,7 @@ pub fn visit_expr<V: Visitor>(v: &mut V, e: &Expr) {
 				v.visit_expr(value);
 			}
 		}
-		Expr::Function(expr_params, expr) => {
+		Expr::Function(_span, expr_params, expr) => {
 			visit_params(v, expr_params);
 			v.visit_expr(expr);
 		}

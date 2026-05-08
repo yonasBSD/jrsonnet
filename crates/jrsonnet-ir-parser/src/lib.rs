@@ -66,8 +66,22 @@ impl<'a> Parser<'a> {
 		!self.at_eof() && self.peek() == kind
 	}
 
+	#[allow(dead_code)]
+	fn nth(&self, n: usize) -> SyntaxKind {
+		self.lexemes
+			.get(self.offset + n)
+			.map_or(SyntaxKind::EOF, |l| l.kind)
+	}
+
 	fn eat_any(&mut self) {
 		self.offset += 1;
+	}
+
+	fn eat_any_spanned(&mut self) -> Span {
+		let start = self.span_start();
+		self.eat_any();
+		let end = self.span_end();
+		Span(self.source.clone(), start, end)
 	}
 
 	fn at_eof(&self) -> bool {
@@ -106,6 +120,12 @@ impl<'a> Parser<'a> {
 		}
 		self.eat_any();
 		Ok(())
+	}
+	fn eat_spanned(&mut self, t: SyntaxKind) -> Result<Span> {
+		let start = self.span_start();
+		self.eat(t)?;
+		let end = self.span_end();
+		Ok(Span(self.source.clone(), start, end))
 	}
 
 	fn span_start(&self) -> u32 {
@@ -227,7 +247,7 @@ fn ident(p: &mut Parser<'_>) -> Result<IStr> {
 	Ok(IStr::from(text))
 }
 
-fn literal(p: &mut Parser<'_>) -> Option<LiteralType> {
+fn literal(p: &mut Parser<'_>) -> Option<(Span, LiteralType)> {
 	let t = match p.peek() {
 		T![self] => LiteralType::This,
 		T![super] => LiteralType::Super,
@@ -237,8 +257,7 @@ fn literal(p: &mut Parser<'_>) -> Option<LiteralType> {
 		T![false] => LiteralType::False,
 		_ => return None,
 	};
-	p.eat_any();
-	Some(t)
+	Some((p.eat_any_spanned(), t))
 }
 
 fn assert_stmt(p: &mut Parser<'_>) -> Result<AssertStmt> {
@@ -475,20 +494,20 @@ fn bind(p: &mut Parser<'_>) -> Result<BindSpec> {
 			});
 		}
 	}
-	let name_spanned = spanned(p, ident)?;
+	let name = spanned(p, ident)?;
 	if p.try_eat(T!['(']) {
 		let ps = params(p)?;
 		p.eat(T![')'])?;
 		p.eat(T![=])?;
 		Ok(BindSpec::Function {
-			name: name_spanned.value,
+			name,
 			params: ps,
 			value: expr(p)?,
 		})
 	} else {
 		p.eat(T![=])?;
 		Ok(BindSpec::Field {
-			into: Destruct::Full(name_spanned),
+			into: Destruct::Full(name),
 			value: expr(p)?,
 		})
 	}
@@ -561,20 +580,36 @@ fn member(p: &mut Parser<'_>) -> Result<Member> {
 	}
 }
 
-fn for_spec(p: &mut Parser<'_>) -> Result<ForSpecData> {
+fn for_spec(p: &mut Parser<'_>) -> Result<CompSpec> {
 	p.eat(T![for])?;
+	#[cfg(feature = "exp-object-iteration")]
+	if p.at(T!['[']) && p.nth(1) == SyntaxKind::IDENT && p.nth(2) == T![']'] && p.nth(3) == T![:] {
+		p.eat(T!['['])?;
+		let key = ident(p)?;
+		p.eat(T![']'])?;
+		let visibility = visibility(p)?;
+		let value = destruct(p)?;
+		p.eat(T![in])?;
+		let over = expr(p)?;
+		return Ok(CompSpec::ForObjSpec(jrsonnet_ir::ForObjSpecData {
+			key,
+			visibility,
+			value,
+			over,
+		}));
+	}
 	let d = destruct(p)?;
 	p.eat(T![in])?;
 	let over = expr(p)?;
-	Ok(ForSpecData { destruct: d, over })
+	Ok(CompSpec::ForSpec(ForSpecData { destruct: d, over }))
 }
 
 fn compspecs(p: &mut Parser<'_>) -> Result<Vec<CompSpec>> {
 	let mut specs = Vec::new();
-	specs.push(CompSpec::ForSpec(for_spec(p)?));
+	specs.push(for_spec(p)?);
 	loop {
 		if p.at(T![for]) {
-			specs.push(CompSpec::ForSpec(for_spec(p)?));
+			specs.push(for_spec(p)?);
 		} else if p.at(T![if]) {
 			let isd = if_spec_data(p)?;
 			specs.push(CompSpec::IfSpec(isd));
@@ -653,8 +688,8 @@ fn objinside(p: &mut Parser<'_>) -> Result<ObjBody> {
 
 #[allow(clippy::too_many_lines)]
 fn expr_basic(p: &mut Parser<'_>) -> Result<Expr> {
-	if let Some(lit) = literal(p) {
-		return Ok(Expr::Literal(lit));
+	if let Some((span, lit)) = literal(p) {
+		return Ok(Expr::Literal(span, lit));
 	}
 
 	match p.peek() {
@@ -732,12 +767,12 @@ fn expr_basic(p: &mut Parser<'_>) -> Result<Expr> {
 		T![if] => Ok(Expr::IfElse(Box::new(if_else(p)?))),
 
 		T![function] => {
-			p.eat(T![function])?;
+			let span = p.eat_spanned(T![function])?;
 			p.eat(T!['('])?;
 			let ps = params(p)?;
 			p.eat(T![')'])?;
 			let body = expr(p)?;
-			Ok(Expr::Function(ps, Box::new(body)))
+			Ok(Expr::Function(span, ps, Box::new(body)))
 		}
 
 		T![assert] => {
@@ -797,7 +832,7 @@ fn flush_index_parts(e: &mut Expr, parts: &mut Vec<IndexPart>) {
 	if parts.is_empty() {
 		return;
 	}
-	let old = std::mem::replace(e, Expr::Literal(LiteralType::Null));
+	let old = std::mem::replace(e, Expr::Str(IStr::empty()));
 	*e = Expr::Index {
 		indexable: Box::new(old),
 		parts: std::mem::take(parts),
@@ -1015,7 +1050,7 @@ pub fn parse(str: &str, settings: &ParserSettings) -> Result<Expr> {
 	}
 	let e = expr(&mut p)?;
 	if !p.at_eof() {
-		return Err(p.error(format!("expected end of file, got {}", p.current_desc(),)));
+		return Err(p.error(format!("expected end of file, got {}", p.current_desc())));
 	}
 	Ok(e)
 }
@@ -1028,10 +1063,7 @@ pub fn string_to_expr(s: IStr, settings: &ParserSettings) -> Spanned<Expr> {
 
 #[cfg(test)]
 mod tests {
-	use std::fs;
-
-	use insta::{assert_snapshot, glob};
-	use jrsonnet_ir::{IStr, Source};
+	use insta::assert_snapshot;
 
 	use super::*;
 
@@ -1136,6 +1168,11 @@ mod tests {
 	#[test]
 	#[cfg(not(feature = "exp-null-coaelse"))]
 	fn peg_snapshots() {
+		use std::fs;
+
+		use insta::glob;
+		use jrsonnet_ir::{IStr, Source};
+
 		glob!("../../jrsonnet-peg-parser/src", "tests/*.jsonnet", |path| {
 			let input = fs::read_to_string(path).expect("read test file");
 			let source = Source::new_virtual("<test>".into(), IStr::empty());

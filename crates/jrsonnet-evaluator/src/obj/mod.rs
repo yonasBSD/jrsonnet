@@ -23,7 +23,7 @@ pub use oop::ObjValueBuilder;
 
 use crate::{
 	CcUnbound, MaybeUnbound, Result, Thunk, Unbound, Val,
-	arr::{PickObjectKeyValues, PickObjectValues},
+	arr::{PickObjectKeyValues, PickObjectValues, arridx},
 	bail,
 	error::{ErrorKind::*, suggest_object_fields},
 	evaluate::operator::evaluate_add_op,
@@ -430,17 +430,17 @@ impl SupThis {
 	/// Exists when super appears outside of `super.field`/`"field" in super` expressions
 	/// Exclusive to jrsonnet.
 	///
-	/// Might return `NoSuperFound` error.
-	pub fn standalone_super(&self) -> Result<ObjValue> {
+	/// Returns None if no `super` found
+	pub fn standalone_super(&self) -> Option<ObjValue> {
 		if !self.sup.super_exists() {
-			bail!(NoSuperFound)
+			return None;
 		}
 		let mut out = ObjValue::builder();
 		out.extend_with_core(StandaloneSuperCore {
 			sup: self.sup,
 			this: self.this.clone(),
 		});
-		Ok(out.build())
+		Some(out.build())
 	}
 	pub fn this(&self) -> &ObjValue {
 		&self.this
@@ -510,11 +510,14 @@ impl ObjValue {
 	// }
 	/// Returns amount of visible object fields
 	/// If object only contains hidden fields - may return zero.
-	pub fn len(&self) -> u32 {
+	pub fn len(&self) -> usize {
 		self.fields_visibility()
 			.values()
 			.filter(|d| d.visible())
-			.count() as u32
+			.count()
+	}
+	pub fn len32(&self) -> u32 {
+		arridx(self.len())
 	}
 	/// For each field, calls callback.
 	/// If callback returns false - ends iteration prematurely.
@@ -625,7 +628,7 @@ impl ObjValue {
 				Entry::Vacant(v) => {
 					v.insert(CacheValue::Pending);
 				}
-			};
+			}
 		}
 		let result = self.get_idx_uncached(key, core);
 		{
@@ -908,6 +911,56 @@ impl ObjValue {
 		out.retain(|_, v| v.exists_visible.is_some());
 
 		out
+	}
+	pub fn fields_with_visibility(
+		&self,
+		#[cfg(feature = "exp-preserve-order")] preserve_order: bool,
+	) -> Vec<(IStr, Visibility)> {
+		#[cfg(feature = "exp-preserve-order")]
+		if preserve_order {
+			let (mut fields, mut keys): (Vec<_>, Vec<_>) = self
+				.fields_visibility()
+				.into_iter()
+				.enumerate()
+				.map(|(idx, (k, d))| {
+					(
+						(
+							k,
+							d.exists_visible.expect("non-existing fields filtered out"),
+						),
+						(d.sort_key(), idx),
+					)
+				})
+				.unzip();
+			keys.sort_unstable_by_key(|v| v.0);
+			for i in 0..fields.len() {
+				let x = fields[i].clone();
+				let mut j = i;
+				loop {
+					let k = keys[j].1;
+					keys[j].1 = j;
+					if k == i {
+						break;
+					}
+					fields[j] = fields[k].clone();
+					j = k;
+				}
+				fields[j] = x;
+			}
+			return fields;
+		}
+		let mut fields: Vec<_> = self
+			.fields_visibility()
+			.into_iter()
+			.map(|(k, d)| {
+				(
+					k,
+					d.exists_visible.expect("non-existing fields filtered out"),
+				)
+			})
+			.collect();
+		fields.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+		fields
 	}
 	pub fn fields_ex(
 		&self,

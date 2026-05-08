@@ -7,12 +7,14 @@ AssertExpr(
         assert: AssertStmt {
             assertion: Index {
                 indexable: Literal(
+                    virtual:<test>:7-11,
                     True,
                 ),
                 parts: [
                     IndexPart {
                         span: virtual:<test>:12-17,
                         value: Literal(
+                            virtual:<test>:12-17,
                             False,
                         ),
                     },
@@ -20,11 +22,13 @@ AssertExpr(
             } from virtual:<test>:7-18,
             message: Some(
                 Literal(
+                    virtual:<test>:21-26,
                     False,
                 ),
             ),
         },
         rest: Literal(
+            virtual:<test>:29-33,
             True,
         ),
     },

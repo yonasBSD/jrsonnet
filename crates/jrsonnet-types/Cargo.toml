@@ -18,4 +18,5 @@ jrsonnet-gcmodule.workspace = true
 peg.workspace = true
 
 [features]
+experimental = ["exp-bigint"]
 exp-bigint = []

@@ -28,7 +28,10 @@ use jrsonnet_ir::{
 use rustc_hash::FxHashMap;
 use smallvec::SmallVec;
 
-use crate::error::{format_found, suggest_names};
+use crate::{
+	arr::arridx,
+	error::{format_found, suggest_names},
+};
 
 #[derive(Debug, Clone, Copy)]
 #[must_use]
@@ -410,6 +413,15 @@ pub enum LCompSpec {
 		/// Is `over` does not depend on any variable introduced by an earlier for-spec in this comprehension chain
 		loop_invariant: bool,
 	},
+	#[cfg(feature = "exp-object-iteration")]
+	ForObj {
+		frame_shape: ClosureShape,
+		key: LocalSlot,
+		visibility: jrsonnet_ir::Visibility,
+		value: LDestruct,
+		over: LExpr,
+		loop_invariant: bool,
+	},
 }
 
 struct FrameAlloc<'s> {
@@ -460,7 +472,7 @@ impl<'s> FrameAlloc<'s> {
 		match bind {
 			BindSpec::Field { into, .. } => self.alloc_destruct(into),
 			BindSpec::Function { name, .. } => {
-				let (_, id) = self.define_local(name.clone(), None)?;
+				let (_, id) = self.define_local(name.value.clone(), Some(name.span.clone()))?;
 				Some(LDestruct::Full(id))
 			}
 		}
@@ -649,7 +661,7 @@ struct PendingBody<'s> {
 	stack: &'s mut AnalysisStack,
 	bomb: DropBomb,
 }
-impl<'s> PendingBody<'s> {
+impl PendingBody<'_> {
 	/// After the body is processed, drop the frame's locals and emit any
 	/// "unused local" warnings.
 	fn finish(self) {
@@ -695,7 +707,7 @@ impl<'s> PendingBody<'s> {
 			.drain(closures.first_in_frame.idx()..)
 			.collect();
 		for (i, def) in drained.iter().enumerate().rev() {
-			let id = LocalId(closures.first_in_frame.0 + i as u32);
+			let id = LocalId(closures.first_in_frame.0 + arridx(i));
 			let stack_locals = stack
 				.local_by_name
 				.get_mut(&def.name)
@@ -810,7 +822,7 @@ impl Closures {
 			let (this_refs, rest) = refs.split_at(*refs_len);
 			refs = rest;
 			let start = next_id;
-			next_id += *dest_count as u32;
+			next_id += arridx(*dest_count);
 			Closure {
 				references: this_refs,
 				ids: start..next_id,
@@ -1034,7 +1046,7 @@ impl AnalysisStack {
 	}
 
 	fn next_local_id(&self) -> LocalId {
-		LocalId(self.local_defs.len() as u32)
+		LocalId(arridx(self.local_defs.len()))
 	}
 
 	fn report_error(&mut self, msg: impl Into<String>, span: Option<Span>) {
@@ -1325,18 +1337,18 @@ pub fn analyze_named(
 	stack: &mut AnalysisStack,
 	taint: &mut AnalysisResult,
 ) -> LExpr {
-	if let Expr::Function(params, body) = expr {
-		return analyze_function(Some(name), params, body, stack, taint);
+	if let Expr::Function(span, params, body) = expr {
+		return analyze_function(Some(name), &span, &params, body, stack, taint);
 	}
 	analyze(expr, stack, taint)
 }
 #[allow(clippy::too_many_lines)]
 pub fn analyze(expr: &Expr, stack: &mut AnalysisStack, taint: &mut AnalysisResult) -> LExpr {
 	match expr {
-		Expr::Literal(l) => match l {
+		Expr::Literal(span, l) => match l {
 			LiteralType::This => stack.use_this(taint).map_or_else(
 				|| {
-					stack.report_error("`self` used outside of object", None);
+					stack.report_error("`self` used outside of object", Some(span.clone()));
 					LExpr::BadLocal("self")
 				},
 				LExpr::Slot,
@@ -1345,13 +1357,13 @@ pub fn analyze(expr: &Expr, stack: &mut AnalysisStack, taint: &mut AnalysisResul
 				if stack.use_super(taint).is_some() {
 					LExpr::Super
 				} else {
-					stack.report_error("`super` used outside of object", None);
+					stack.report_error("`super` used outside of object", Some(span.clone()));
 					LExpr::BadLocal("super")
 				}
 			}
 			LiteralType::Dollar => stack.use_dollar(taint).map_or_else(
 				|| {
-					stack.report_error("`$` used outside of object", None);
+					stack.report_error("`$` used outside of object", Some(span.clone()));
 					LExpr::BadLocal("$")
 				},
 				LExpr::Slot,
@@ -1463,7 +1475,9 @@ pub fn analyze(expr: &Expr, stack: &mut AnalysisStack, taint: &mut AnalysisResul
 				parts: parts_l,
 			}
 		}
-		Expr::Function(params, body) => analyze_function(None, params, body, stack, taint),
+		Expr::Function(span, params, body) => {
+			analyze_function(None, span, params, body, stack, taint)
+		}
 		Expr::IfElse(ifelse) => {
 			let IfElse {
 				cond,
@@ -1529,15 +1543,22 @@ fn analyze_bind_value(
 ) -> LExpr {
 	match bind {
 		BindSpec::Field {
-			value: Expr::Function(params, value),
+			value: Expr::Function(span, params, value),
 			into: Destruct::Full(name),
-		} => analyze_function(Some(name.value.clone()), params, value, stack, taint),
+		} => analyze_function(Some(name.value.clone()), &span, params, value, stack, taint),
 		BindSpec::Field { value, .. } => analyze(value, stack, taint),
 		BindSpec::Function {
 			params,
 			value,
 			name,
-		} => analyze_function(Some(name.clone()), params, value, stack, taint),
+		} => analyze_function(
+			Some(name.value.clone()),
+			&name.span,
+			params,
+			value,
+			stack,
+			taint,
+		),
 	}
 }
 
@@ -1556,7 +1577,7 @@ fn process_local_frame<R>(
 	let mut pending = alloc.finish();
 
 	let mut l_binds: Vec<LBind> = Vec::with_capacity(binds.len());
-	for (bind, destruct) in binds.iter().zip(destructs.into_iter()) {
+	for (bind, destruct) in binds.iter().zip(destructs) {
 		let mut value_taint = AnalysisResult::default();
 		let (value_shape, value) = pending
 			.stack
@@ -1583,6 +1604,7 @@ fn process_local_frame<R>(
 
 fn analyze_function(
 	name: Option<IStr>,
+	span: &Span,
 	params: &ExprParams,
 	body: &Expr,
 	stack: &mut AnalysisStack,
@@ -1599,7 +1621,7 @@ fn analyze_function(
 	let mut pending = alloc.finish();
 
 	let mut l_params: Vec<LParam> = Vec::with_capacity(params.exprs.len());
-	for (p, destruct) in params.exprs.iter().zip(param_destructs.into_iter()) {
+	for (p, destruct) in params.exprs.iter().zip(param_destructs) {
 		let mut value_taint = AnalysisResult::default();
 		let default = p.default.as_ref().map_or_else(
 			|| None,
@@ -1636,15 +1658,15 @@ fn analyze_function(
 
 	// function(x) x is an identity function
 	if l_params.len() == 1 && l_params[0].default.is_none() {
-		stack.report_warning(
-			"do not define identity functions manually, use std.id instead",
-			None,
-		);
 		#[allow(irrefutable_let_patterns, reason = "refutable with exp-destruct")]
 		if let LDestruct::Full(param_slot) = &l_params[0].destruct
 			&& let LExpr::Slot(LSlot::Local(s)) = &body_expr
 			&& s == param_slot
 		{
+			stack.report_warning(
+				"do not define identity functions manually, use std.id instead",
+				Some(span.clone()),
+			);
 			return LExpr::IdentityFunction {};
 		}
 	}
@@ -1715,7 +1737,14 @@ fn analyze_obj_members(
 				for (f, name) in fields.iter().zip(field_names) {
 					let value = stack.in_using_closure(|stack| {
 						if let Some(params) = &f.params {
-							analyze_function(name.function_name(), params, &f.value, stack, taint)
+							analyze_function(
+								name.function_name(),
+								&f.name.span,
+								params,
+								&f.value,
+								stack,
+								taint,
+							)
 						} else {
 							analyze(&f.value, stack, taint)
 						}
@@ -1759,7 +1788,14 @@ fn analyze_obj_comp(
 			process_local_frame(&comp.locals, stack, taint, |stack, taint| {
 				let value = stack.in_using_closure(|stack| {
 					if let Some(params) = &comp.field.params {
-						analyze_function(None, params, &comp.field.value, stack, taint)
+						analyze_function(
+							None,
+							&comp.field.name.span,
+							params,
+							&comp.field.value,
+							stack,
+							taint,
+						)
 					} else {
 						analyze(&comp.field.value, stack, taint)
 					}
@@ -1862,6 +1898,48 @@ fn analyze_comp_specs<R>(
 				);
 				(r, rest)
 			}
+			#[cfg(feature = "exp-object-iteration")]
+			CompSpec::ForObjSpec(data) => {
+				let mut over_taint = AnalysisResult::default();
+				let over_l = analyze(&data.over, stack, &mut over_taint);
+				let loop_invariant = over_taint.local_dependent_depth > outer_depth;
+				taint.taint_by(over_taint);
+
+				let mut alloc = FrameAlloc::new(stack);
+				let closure = alloc.push_locals_closure();
+				let Some((_, key_slot)) = alloc.define_local(data.key.clone(), None) else {
+					stack.pop_closure(closure);
+					return go(idx + 1, specs, outer_depth, stack, taint, inside);
+				};
+				let Some(l_value) = alloc.alloc_destruct(&data.value) else {
+					stack.pop_closure(closure);
+					return go(idx + 1, specs, outer_depth, stack, taint, inside);
+				};
+				let mut pending = alloc.finish();
+
+				let var_analysis = AnalysisResult::default();
+				pending.record_spec_init(&LDestruct::Full(key_slot), var_analysis);
+				pending.record_spec_init(&l_value, var_analysis);
+
+				let body_frame = pending.finish();
+				let (r, mut rest) =
+					go(idx + 1, specs, outer_depth, body_frame.stack, taint, inside);
+				body_frame.finish();
+				let frame_shape = stack.pop_closure(closure);
+
+				rest.insert(
+					0,
+					LCompSpec::ForObj {
+						frame_shape,
+						key: key_slot,
+						visibility: data.visibility,
+						value: l_value,
+						over: over_l,
+						loop_invariant,
+					},
+				);
+				(r, rest)
+			}
 		}
 	}
 	let outer_depth = stack.depth;
@@ -1908,48 +1986,6 @@ pub fn analyze_root(expr: &Expr, ctx: Vec<(IStr, LocalId)>) -> AnalysisReport {
 	}
 }
 
-#[cfg(test)]
-fn render_diagnostics(src: &str, diags: &[Diagnostic]) -> String {
-	use std::fmt::Write;
-
-	use hi_doc::{Formatting, SnippetBuilder, Text};
-
-	let mut out = String::new();
-	let mut unspanned = Vec::new();
-	let mut spanned: Vec<&Diagnostic> = Vec::new();
-	for d in diags {
-		if d.span.is_some() {
-			spanned.push(d);
-		} else {
-			unspanned.push(d);
-		}
-	}
-	if !spanned.is_empty() {
-		let mut builder = SnippetBuilder::new(src);
-		for d in spanned {
-			let span = d.span.as_ref().expect("spanned");
-			let ab = match d.level {
-				DiagLevel::Error => {
-					builder.error(Text::fragment(d.message.clone(), Formatting::default()))
-				}
-				DiagLevel::Warning => {
-					builder.warning(Text::fragment(d.message.clone(), Formatting::default()))
-				}
-			};
-			ab.range(span.range()).build();
-		}
-		out.push_str(&hi_doc::source_to_ansi(&builder.build()));
-	}
-	for d in unspanned {
-		let prefix = match d.level {
-			DiagLevel::Error => "error",
-			DiagLevel::Warning => "warning",
-		};
-		writeln!(out, "{prefix}: {}", d.message).expect("fmt");
-	}
-	out
-}
-
 pub struct AnalysisReport {
 	pub lir: LExpr,
 	pub root_shape: ClosureShape,
@@ -1960,15 +1996,63 @@ pub struct AnalysisReport {
 
 #[cfg(test)]
 mod tests {
-	use std::fs;
-
-	use insta::{assert_snapshot, glob};
-	use jrsonnet_ir::Source;
-
-	use super::*;
-
 	#[test]
+	#[cfg(not(feature = "exp-null-coaelse"))]
 	fn snapshots() {
+		use std::fs;
+
+		use insta::{assert_snapshot, glob};
+		use jrsonnet_ir::Source;
+
+		use super::*;
+
+		fn render_diagnostics(src: &str, diags: &[Diagnostic]) -> String {
+			use std::fmt::Write;
+
+			use hi_doc::{Formatting, SnippetBuilder, Text};
+
+			let mut out = String::new();
+			let mut unspanned = Vec::new();
+			let mut spanned: Vec<&Diagnostic> = Vec::new();
+			for d in diags {
+				if d.span.is_some() {
+					spanned.push(d);
+				} else {
+					unspanned.push(d);
+				}
+			}
+			if !spanned.is_empty() {
+				let mut builder = SnippetBuilder::new(src);
+				for d in spanned {
+					let span = d.span.as_ref().expect("spanned");
+					let ab = match d.level {
+						DiagLevel::Error => {
+							builder.error(Text::fragment(d.message.clone(), Formatting::default()))
+						}
+						DiagLevel::Warning => builder
+							.warning(Text::fragment(d.message.clone(), Formatting::default())),
+					};
+					ab.range(span.range()).build();
+				}
+				out.push_str(&hi_doc::source_to_ansi(&builder.build()));
+			}
+			for d in unspanned {
+				let prefix = match d.level {
+					DiagLevel::Error => "error",
+					DiagLevel::Warning => "warning",
+				};
+				writeln!(out, "{prefix}: {}", d.message).expect("fmt");
+			}
+			out
+		}
+		fn fmt_depth(d: u32) -> String {
+			if d == u32::MAX {
+				"none".into()
+			} else {
+				d.to_string()
+			}
+		}
+
 		glob!("analysis_tests/*.jsonnet", |path| {
 			let code = fs::read_to_string(path).expect("read test file");
 			let src = Source::new_virtual("<test>".into(), code.clone().into());
@@ -1989,13 +2073,5 @@ mod tests {
 			);
 			assert_snapshot!(rendered);
 		});
-	}
-
-	fn fmt_depth(d: u32) -> String {
-		if d == u32::MAX {
-			"none".into()
-		} else {
-			d.to_string()
-		}
 	}
 }

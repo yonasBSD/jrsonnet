@@ -13,6 +13,12 @@ version.workspace = true
 workspace = true
 
 [features]
+experimental = [
+  "exp-preserve-order",
+  "exp-bigint",
+  "exp-null-coaelse",
+  "exp-regex",
+]
 exp-preserve-order = [
   "jrsonnet-evaluator/exp-preserve-order",
   "jrsonnet-stdlib/exp-preserve-order",

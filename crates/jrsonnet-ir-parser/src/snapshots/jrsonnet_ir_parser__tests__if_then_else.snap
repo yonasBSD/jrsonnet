@@ -7,6 +7,7 @@ IfElse(
         cond: IfSpecData {
             span: virtual:<test>:0-2,
             cond: Literal(
+                virtual:<test>:3-7,
                 True,
             ),
         },
