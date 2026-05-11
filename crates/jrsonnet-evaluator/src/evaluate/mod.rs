@@ -11,11 +11,11 @@ use self::{
 	operator::evaluate_binary_op_special,
 };
 use crate::{
-	Context, Error, ObjValue, ObjValueBuilder, ObjectAssertion, Result, ResultExt as _, SupThis,
-	Unbound, Val,
+	CcObjectAssertion, CcUnbound, Context, Error, MaybeUnbound, ObjValue, ObjValueBuilder,
+	ObjectAssertion, Result, ResultExt as _, StaticShapeOopObject, SupThis, Unbound, Val,
 	analyze::{
 		ClosureShape, LArgsDesc, LAssertStmt, LExpr, LFieldMember, LFieldName, LFunction,
-		LIndexPart, LObjAsserts, LObjBody, LObjMembers, LSlot,
+		LIndexPart, LObjAsserts, LObjBody, LObjMembers, LObjStaticMembers, LSlot,
 	},
 	arr::ArrValue,
 	bail,
@@ -52,15 +52,11 @@ pub fn ensure_sufficient_stack<R>(f: impl FnOnce() -> R) -> R {
 }
 
 pub fn evaluate_trivial(expr: &LExpr) -> Option<Val> {
-	// TODO: Eager trivial array
-	Some(match expr {
-		LExpr::Str(s) => Val::string(s.clone()),
-		LExpr::Num(n) => Val::Num(*n),
-		LExpr::Bool(false) => Val::Bool(false),
-		LExpr::Bool(true) => Val::Bool(true),
-		LExpr::Null => Val::Null,
-		_ => return None,
-	})
+	if let LExpr::Trivial(tv) = expr {
+		Some(tv.clone().into())
+	} else {
+		None
+	}
 }
 
 pub fn evaluate_method(ctx: Context, name: IStr, func: &Rc<LFunction>) -> Val {
@@ -119,13 +115,24 @@ mod names {
 pub fn evaluate(mut ctx: Context, mut expr: &LExpr) -> Result<Val> {
 	loop {
 		return Ok(match expr {
-			LExpr::Null => Val::Null,
-			LExpr::Bool(b) => Val::Bool(*b),
-			LExpr::Str(s) => Val::string(s.clone()),
-			LExpr::Num(n) => Val::Num(*n),
+			LExpr::Trivial(tv) => tv.clone().into(),
 			LExpr::Slot(slot) => ctx.slot(*slot).evaluate()?,
 			LExpr::BadLocal(name) => panic!("unresolvable reference: {name}"),
-			LExpr::Arr { shape, items } => Val::Arr(ArrValue::expr(ctx, shape, items.clone())),
+			LExpr::ArrConst(rc) => Val::Arr(ArrValue::new(rc.clone())),
+			LExpr::Arr { shape, items } => {
+				let inner = Context::enter_using(&ctx, shape);
+				'eager: {
+					let mut out: Vec<Val> = Vec::with_capacity(items.len());
+					for item in items.iter() {
+						let Ok(r) = evaluate(inner.clone(), item) else {
+							break 'eager;
+						};
+						out.push(r);
+					}
+					return Ok(Val::Arr(ArrValue::new(out)));
+				}
+				Val::Arr(ArrValue::expr(inner, items.clone()))
+			}
 			LExpr::UnaryOp(op, value) => {
 				let value = evaluate(ctx, value)?;
 				evaluate_unary_op(*op, &value)?
@@ -462,6 +469,9 @@ fn evaluate_index(ctx: Context, indexable: &LExpr, parts: &[LIndexPart]) -> Resu
 fn evaluate_obj_body(super_obj: Option<ObjValue>, ctx: Context, body: &LObjBody) -> Result<Val> {
 	match body {
 		LObjBody::MemberList(members) => evaluate_obj_members(super_obj, ctx, members),
+		LObjBody::StaticMembers(members) => {
+			Ok(evaluate_static_obj_members(super_obj, ctx, members))
+		}
 		LObjBody::ObjComp(comp) => evaluate_obj_comp(super_obj, ctx, comp),
 	}
 }
@@ -531,6 +541,84 @@ pub fn evaluate_field_member_static(
 		.with_visibility(*visibility)
 		.try_thunk(Thunk!(move || evaluate(env, &value.1)))?;
 	Ok(())
+}
+
+fn evaluate_static_obj_members(
+	super_obj: Option<ObjValue>,
+	ctx: Context,
+	members: &LObjStaticMembers,
+) -> Val {
+	#[derive(Trace)]
+	struct UnboundField<B: Trace> {
+		uctx: B,
+		value: Rc<(ClosureShape, LExpr)>,
+		name: IStr,
+	}
+	impl<B: Unbound<Bound = Context>> Unbound for UnboundField<B> {
+		type Bound = Val;
+		fn bind(&self, sup_this: SupThis) -> Result<Val> {
+			let a_ctx = self.uctx.bind(sup_this)?;
+			let b_ctx = Context::enter_using(&a_ctx, &self.value.0);
+			evaluate(b_ctx, &self.value.1)
+		}
+	}
+
+	let needs_unbound = members.this.is_some() || members.uses_super;
+
+	let mut bindings: Vec<MaybeUnbound> = Vec::with_capacity(members.bindings.len());
+
+	let assertion = if needs_unbound {
+		let uctx = CachedUnbound::new(evaluate_locals_unbound(
+			&ctx,
+			&members.frame_shape,
+			members.this,
+			members.locals.clone(),
+		));
+		for (binding, field) in members.bindings.iter().zip(members.shape.fields()) {
+			if let Some(v) = evaluate_trivial(&binding.1) {
+				bindings.push(MaybeUnbound::Const(v));
+				continue;
+			}
+			bindings.push(MaybeUnbound::Unbound(CcUnbound::new(UnboundField {
+				uctx: uctx.clone(),
+				value: binding.clone(),
+				name: field.name.clone(),
+			})));
+		}
+		members
+			.asserts
+			.as_ref()
+			.map(|a| CcObjectAssertion::new(evaluate_object_assertions_unbound(uctx, a.clone())))
+	} else {
+		let a_ctx = ctx
+			.pack_captures_sup_this(&members.frame_shape)
+			.enter(|fill, ctx| {
+				fill_letrec_binds(fill, ctx, &members.locals);
+			});
+		for binding in &members.bindings {
+			if let Some(v) = evaluate_trivial(&binding.1) {
+				bindings.push(MaybeUnbound::Const(v));
+				continue;
+			}
+			let env = Context::enter_using(&a_ctx, &binding.0);
+			let value = binding.clone();
+			bindings.push(MaybeUnbound::Bound(Thunk!(move || evaluate(env, &value.1))));
+		}
+		members.asserts.as_ref().map(|a| {
+			CcObjectAssertion::new(evaluate_object_assertions_static(a_ctx.clone(), a.clone()))
+		})
+	};
+
+	let mut builder = ObjValueBuilder::with_capacity(0);
+	if let Some(sup) = super_obj {
+		builder.with_super(sup);
+	}
+	builder.extend_with_core(StaticShapeOopObject::new(
+		members.shape.clone(),
+		bindings,
+		assertion,
+	));
+	Val::Obj(builder.build())
 }
 
 fn evaluate_obj_members(

@@ -21,16 +21,18 @@ use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_interner::IStr;
 use jrsonnet_ir::{
 	ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BinaryOpType, BindSpec, CompSpec, Destruct, Expr,
-	ExprParams, FieldName, ForSpecData, IfElse, IfSpecData, ImportKind, LiteralType, NumValue,
-	ObjBody, ObjComp, ObjMembers, Slice, SliceDesc, Span, Spanned, UnaryOpType, Visibility,
+	ExprParams, FieldName, ForSpecData, IdentityKind, IfElse, IfSpecData, ImportKind, ObjBody,
+	ObjComp, ObjMembers, Slice, SliceDesc, Span, Spanned, TrivialVal, UnaryOpType, Visibility,
 	function::FunctionSignature,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use smallvec::SmallVec;
 
 use crate::{
 	arr::arridx,
 	error::{format_found, suggest_names},
+	gc::WithCapacityExt as _,
+	obj::{ObjFieldFlags, ObjShape, ShapeField, ordering::FieldIndex},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -138,14 +140,12 @@ impl LocalDefinition {
 #[derive(Debug, Acyclic)]
 pub enum LExpr {
 	Slot(LSlot),
-	Null,
-	Bool(bool),
-	Str(IStr),
-	Num(NumValue),
+	Trivial(TrivialVal),
 	Arr {
 		shape: ClosureShape,
 		items: Rc<Vec<LExpr>>,
 	},
+	ArrConst(Rc<Vec<TrivialVal>>),
 	ArrComp(Box<LArrComp>),
 	Obj(LObjBody),
 	ObjExtend(Box<LExpr>, LObjBody),
@@ -331,6 +331,7 @@ pub struct LIndexPart {
 #[derive(Debug, Acyclic)]
 pub enum LObjBody {
 	MemberList(LObjMembers),
+	StaticMembers(Box<LObjStaticMembers>),
 	ObjComp(Box<LObjComp>),
 }
 
@@ -348,6 +349,20 @@ pub struct LObjMembers {
 	pub locals: Rc<Vec<LBind>>,
 	pub asserts: Option<Rc<LObjAsserts>>,
 	pub fields: Vec<LFieldMember>,
+}
+
+#[derive(Debug, Acyclic)]
+pub struct LObjStaticMembers {
+	pub frame_shape: ClosureShape,
+	pub this: Option<LocalSlot>,
+	pub set_dollar: bool,
+	pub uses_super: bool,
+
+	pub locals: Rc<Vec<LBind>>,
+	pub asserts: Option<Rc<LObjAsserts>>,
+
+	pub shape: Rc<ObjShape>,
+	pub bindings: Vec<Rc<(ClosureShape, LExpr)>>,
 }
 
 #[derive(Debug, Acyclic)]
@@ -1338,22 +1353,22 @@ pub fn analyze_named(
 	taint: &mut AnalysisResult,
 ) -> LExpr {
 	if let Expr::Function(span, params, body) = expr {
-		return analyze_function(Some(name), &span, &params, body, stack, taint);
+		return analyze_function(Some(name), span, params, body, stack, taint);
 	}
 	analyze(expr, stack, taint)
 }
 #[allow(clippy::too_many_lines)]
 pub fn analyze(expr: &Expr, stack: &mut AnalysisStack, taint: &mut AnalysisResult) -> LExpr {
 	match expr {
-		Expr::Literal(span, l) => match l {
-			LiteralType::This => stack.use_this(taint).map_or_else(
+		Expr::Identity(span, l) => match l {
+			IdentityKind::This => stack.use_this(taint).map_or_else(
 				|| {
 					stack.report_error("`self` used outside of object", Some(span.clone()));
 					LExpr::BadLocal("self")
 				},
 				LExpr::Slot,
 			),
-			LiteralType::Super => {
+			IdentityKind::Super => {
 				if stack.use_super(taint).is_some() {
 					LExpr::Super
 				} else {
@@ -1361,25 +1376,34 @@ pub fn analyze(expr: &Expr, stack: &mut AnalysisStack, taint: &mut AnalysisResul
 					LExpr::BadLocal("super")
 				}
 			}
-			LiteralType::Dollar => stack.use_dollar(taint).map_or_else(
+			IdentityKind::Dollar => stack.use_dollar(taint).map_or_else(
 				|| {
 					stack.report_error("`$` used outside of object", Some(span.clone()));
 					LExpr::BadLocal("$")
 				},
 				LExpr::Slot,
 			),
-			LiteralType::Null => LExpr::Null,
-			LiteralType::True => LExpr::Bool(true),
-			LiteralType::False => LExpr::Bool(false),
 		},
-		Expr::Str(s) => LExpr::Str(s.clone()),
-		Expr::Num(n) => LExpr::Num(*n),
+		Expr::Trivial(tv) => LExpr::Trivial(tv.clone()),
 		Expr::Var(v) => stack
 			.use_local(&v.value, v.span.clone(), taint)
 			.map_or_else(|| LExpr::BadLocal("ref"), LExpr::Slot),
 		Expr::Arr(a) => {
-			let (shape, items) = stack
-				.in_using_closure(|stack| a.iter().map(|v| analyze(v, stack, taint)).collect());
+			if a.iter().all(|i| matches!(i, Expr::Trivial(_))) {
+				let trivials: Vec<_> = a
+					.iter()
+					.map(|i| match i {
+						Expr::Trivial(tv) => tv.clone(),
+						_ => unreachable!("checked above"),
+					})
+					.collect();
+				return LExpr::ArrConst(Rc::new(trivials));
+			}
+			let (shape, items) = stack.in_using_closure(|stack| {
+				a.iter()
+					.map(|v| analyze(v, stack, taint))
+					.collect::<Vec<_>>()
+			});
 			LExpr::Arr {
 				shape,
 				items: Rc::new(items),
@@ -1412,7 +1436,7 @@ pub fn analyze(expr: &Expr, stack: &mut AnalysisStack, taint: &mut AnalysisResul
 		}
 		Expr::LocalExpr(binds, body) => analyze_local_expr(binds, body, stack, taint),
 		Expr::Import(kind, path_expr) => {
-			let Expr::Str(path) = &**path_expr else {
+			let Expr::Trivial(TrivialVal::Str(path)) = &**path_expr else {
 				stack.report_error(
 					"import path must be a string literal",
 					Some(kind.span.clone()),
@@ -1545,7 +1569,7 @@ fn analyze_bind_value(
 		BindSpec::Field {
 			value: Expr::Function(span, params, value),
 			into: Destruct::Full(name),
-		} => analyze_function(Some(name.value.clone()), &span, params, value, stack, taint),
+		} => analyze_function(Some(name.value.clone()), span, params, value, stack, taint),
 		BindSpec::Field { value, .. } => analyze(value, stack, taint),
 		BindSpec::Function {
 			params,
@@ -1687,10 +1711,67 @@ fn analyze_obj_body(
 ) -> LObjBody {
 	match obj {
 		ObjBody::MemberList(members) => {
-			LObjBody::MemberList(analyze_obj_members(members, stack, taint))
+			let lowered = analyze_obj_members(members, stack, taint);
+			match try_lower_static(lowered) {
+				Ok(static_members) => LObjBody::StaticMembers(Box::new(static_members)),
+				Err(member_list) => LObjBody::MemberList(member_list),
+			}
 		}
 		ObjBody::ObjComp(comp) => LObjBody::ObjComp(Box::new(analyze_obj_comp(comp, stack, taint))),
 	}
+}
+
+fn try_lower_static(members: LObjMembers) -> Result<LObjStaticMembers, LObjMembers> {
+	let mut seen: FxHashSet<IStr> = FxHashSet::with_capacity(members.fields.len());
+	for f in &members.fields {
+		match &f.name {
+			LFieldName::Fixed(name) => {
+				if !seen.insert(name.clone()) {
+					return Err(members);
+				}
+			}
+			LFieldName::Dyn(_) => return Err(members),
+		}
+	}
+
+	let LObjMembers {
+		frame_shape,
+		this,
+		set_dollar,
+		uses_super,
+		locals,
+		asserts,
+		fields,
+	} = members;
+
+	let mut shape_fields = Vec::with_capacity(fields.len());
+	let mut bindings = Vec::with_capacity(fields.len());
+	let mut next_index = FieldIndex::default();
+	for f in fields {
+		let LFieldName::Fixed(name) = f.name else {
+			unreachable!("checked above");
+		};
+		let index = next_index;
+		next_index = next_index.next();
+		shape_fields.push(ShapeField {
+			name,
+			flags: ObjFieldFlags::new(f.plus, f.visibility),
+			location: None,
+			index,
+		});
+		bindings.push(f.value);
+	}
+
+	Ok(LObjStaticMembers {
+		frame_shape,
+		this,
+		set_dollar,
+		uses_super,
+		locals,
+		asserts,
+		shape: Rc::new(ObjShape::new(shape_fields)),
+		bindings,
+	})
 }
 
 fn analyze_obj_members(
