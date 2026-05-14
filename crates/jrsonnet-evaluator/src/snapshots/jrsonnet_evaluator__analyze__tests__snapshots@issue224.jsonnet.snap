@@ -128,7 +128,7 @@ Obj(
                                             ),
                                         ),
                                     ),
-                                    loop_invariant: true,
+                                    loop_invariant: false,
                                 },
                             ],
                         },

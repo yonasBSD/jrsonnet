@@ -40,8 +40,12 @@ use crate::{
 pub struct AnalysisResult {
 	/// Highest object, on which identity the value is dependent. `u32::MAX` = not dependent at all
 	pub object_dependent_depth: u32,
-	/// Highest local frame, on which this value depends. `u32::MAX` = not dependent at all
+	/// Highest (outermost) local frame, on which this value depends.
+	/// `u32::MAX` = not dependent at all.
 	pub local_dependent_depth: u32,
+	/// Deepest (innermost) local frame, on which this value depends.
+	/// `<local_dependent_depth` = not dependent at all.
+	pub local_dependent_depth_max: u32,
 }
 
 impl Default for AnalysisResult {
@@ -49,6 +53,7 @@ impl Default for AnalysisResult {
 		Self {
 			object_dependent_depth: u32::MAX,
 			local_dependent_depth: u32::MAX,
+			local_dependent_depth_max: 0,
 		}
 	}
 }
@@ -60,13 +65,19 @@ impl AnalysisResult {
 		}
 	}
 	fn depend_on_local(&mut self, depth: u32) {
-		if depth < self.local_dependent_depth {
-			self.local_dependent_depth = depth;
-		}
+		self.local_dependent_depth = self.local_dependent_depth.min(depth);
+		self.local_dependent_depth_max = self.local_dependent_depth_max.max(depth);
 	}
 	fn taint_by(&mut self, other: AnalysisResult) {
 		self.depend_on_object(other.object_dependent_depth);
-		self.depend_on_local(other.local_dependent_depth);
+		self.local_dependent_depth = self.local_dependent_depth.min(other.local_dependent_depth);
+		self.local_dependent_depth_max = self
+			.local_dependent_depth_max
+			.max(other.local_dependent_depth_max);
+	}
+	/// True if any local was depended on. False for the default (no-deps) state.
+	fn has_local_deps(&self) -> bool {
+		self.local_dependent_depth_max >= self.local_dependent_depth
 	}
 }
 
@@ -1164,10 +1175,12 @@ impl AnalysisStack {
 		let user_def = &mut self.local_defs[user.idx()];
 		let before_obj = user_def.analysis.object_dependent_depth;
 		let before_loc = user_def.analysis.local_dependent_depth;
+		let before_loc_max = user_def.analysis.local_dependent_depth_max;
 		user_def.analysis.taint_by(used_analysis);
 		user_def.analysis.depend_on_local(used_defined_at_depth);
 		before_obj != user_def.analysis.object_dependent_depth
 			|| before_loc != user_def.analysis.local_dependent_depth
+			|| before_loc_max != user_def.analysis.local_dependent_depth_max
 	}
 }
 
@@ -1948,7 +1961,8 @@ fn analyze_comp_specs<R>(
 			CompSpec::ForSpec(ForSpecData { destruct, over }) => {
 				let mut over_taint = AnalysisResult::default();
 				let over_l = analyze(over, stack, &mut over_taint);
-				let loop_invariant = over_taint.local_dependent_depth > outer_depth;
+				let loop_invariant = !over_taint.has_local_deps()
+					|| over_taint.local_dependent_depth_max < outer_depth;
 				taint.taint_by(over_taint);
 
 				let mut alloc = FrameAlloc::new(stack);
@@ -1984,7 +1998,8 @@ fn analyze_comp_specs<R>(
 			CompSpec::ForObjSpec(data) => {
 				let mut over_taint = AnalysisResult::default();
 				let over_l = analyze(&data.over, stack, &mut over_taint);
-				let loop_invariant = over_taint.local_dependent_depth > outer_depth;
+				let loop_invariant = !over_taint.has_local_deps()
+					|| over_taint.local_dependent_depth_max < outer_depth;
 				taint.taint_by(over_taint);
 
 				let mut alloc = FrameAlloc::new(stack);

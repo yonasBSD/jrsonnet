@@ -1,5 +1,6 @@
 ---
 source: crates/jrsonnet-evaluator/src/analyze.rs
+assertion_line: 2278
 expression: rendered
 input_file: crates/jrsonnet-evaluator/src/analysis_tests/issue224_hoisting.jsonnet
 ---
