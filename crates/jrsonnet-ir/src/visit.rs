@@ -27,6 +27,7 @@ pub trait Visitor: Sized {
 	fn visit_import(&mut self, _as_expression: bool, _value: IStr) {}
 }
 
+/// Use [`Visitor`] to recursively visit [`crate::DestructRest`].
 #[cfg(feature = "exp-destruct")]
 pub fn visit_destruct_rest<V: Visitor>(_v: &mut V, destruct: &crate::DestructRest) {
 	match destruct {
