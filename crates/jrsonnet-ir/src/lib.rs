@@ -1,4 +1,5 @@
 #![allow(clippy::redundant_closure_call, clippy::derive_partial_eq_without_eq)]
+#![deny(missing_docs)]
 //! Jrsonnet AST definitions
 
 mod expr;

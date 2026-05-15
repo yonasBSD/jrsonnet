@@ -2,8 +2,8 @@ use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_ir::{
 	ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BindSpec, CompSpec, Destruct, DestructRest, Expr,
 	ExprParam, ExprParams, FieldMember, FieldName, ForSpecData, IStr, IdentityKind, IfElse,
-	IfSpecData, ImportKind, IndexPart, Member, NumValue, ObjBody, ObjComp, ObjMembers, Slice,
-	SliceDesc, Source, Span, Spanned, TrivialVal, Visibility,
+	IfSpecData, ImportKind, IndexPart, NumValue, ObjBody, ObjComp, ObjMembers, Slice, SliceDesc,
+	Source, Span, Spanned, TrivialVal, Visibility,
 };
 use jrsonnet_lexer::unescape;
 use peg::parser;
@@ -27,6 +27,11 @@ macro_rules! expr_un {
 	};
 }
 
+enum Member {
+	BindStmt(BindSpec),
+	AssertStmt(AssertStmt),
+	Field(FieldMember),
+}
 parser! {
 	pub grammar jsonnet_parser() for str {
 		use peg::ParseLiteral;

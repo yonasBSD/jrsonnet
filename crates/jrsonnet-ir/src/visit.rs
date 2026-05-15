@@ -1,3 +1,8 @@
+//! Visitor for jrsonnet AST
+//!
+//! Only useful for import analysis for now, if you want to use it for something else -
+//! feel free to submit your PRs for the necessary features.
+
 use jrsonnet_interner::IStr;
 
 #[cfg(feature = "exp-object-iteration")]

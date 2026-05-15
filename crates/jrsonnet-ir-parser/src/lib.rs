@@ -2,8 +2,8 @@ use jrsonnet_gcmodule::Acyclic;
 use jrsonnet_ir::{
 	ArgsDesc, AssertExpr, AssertStmt, BinaryOp, BinaryOpType, BindSpec, CompSpec, Destruct, Expr,
 	ExprParam, ExprParams, FieldMember, FieldName, ForSpecData, IStr, IdentityKind, IfElse,
-	IfSpecData, ImportKind, IndexPart, Member, NumValue, ObjBody, ObjComp, ObjMembers, Slice,
-	SliceDesc, Source, Span, Spanned, TrivialVal, UnaryOpType, Visibility,
+	IfSpecData, ImportKind, IndexPart, NumValue, ObjBody, ObjComp, ObjMembers, Slice, SliceDesc,
+	Source, Span, Spanned, TrivialVal, UnaryOpType, Visibility,
 };
 use jrsonnet_lexer::{
 	Lexeme, Lexer, Span as LexSpan, SyntaxKind, T, collect_lexed_str_block, unescape,
@@ -558,6 +558,11 @@ fn field(p: &mut Parser<'_>) -> Result<FieldMember> {
 	}
 }
 
+enum Member {
+	BindStmt(BindSpec),
+	AssertStmt(AssertStmt),
+	Field(FieldMember),
+}
 fn member(p: &mut Parser<'_>) -> Result<Member> {
 	if p.at(T![local]) {
 		p.eat(T![local])?;
